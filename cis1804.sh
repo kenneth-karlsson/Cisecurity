@@ -5,11 +5,11 @@ VERSION=20200810-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
-(echo $@ | grep -qi "\-v") && echo -e "Version: ${VERSION}" &&  exit
+(echo $@ | grep -qi -- "-v") && echo -e "Version: ${VERSION}" &&  exit
 
-(echo $@ | grep -qi "\-l") && echo -e "https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode" && exit
+(echo $@ | grep -qi -- "-l") && echo -e "https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode" && exit
 
-(echo $@ | grep -qi "\-d") && echo -e "
+(echo $@ | grep -qi -- "-d") && echo -e "
 DISCLAIMER:
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -20,7 +20,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE." && exit
 
-(echo $@ | grep -qi -E "\-h|--help") && echo -e "
+(echo $@ | grep -qi -E -- "-h|--help") && echo -e "
 Usage: sudo $0
 
 -h  (Show help)
@@ -179,13 +179,13 @@ apt list --installed 2> /dev/null | grep -q net-tools
 
 . ${CISRC}
 
-(echo $@ | grep -qi "\-*u") && U="Y"
-(echo $@ | grep -qi "\-*q") && Q="Y"
-(echo $@ | grep -qi "\-*b") && B="Y"
-(echo $@ | grep -qi "\-s1") && TL="S1"
-(echo $@ | grep -qi "\-s2") && TL="S2"
-(echo $@ | grep -qi "\-w1") && TL="W1"
-(echo $@ | grep -qi "\-w2") && TL="W2"
+(echo $@ | grep -qi -- "-*u") && U="Y"
+(echo $@ | grep -qi -- "-*q") && Q="Y"
+(echo $@ | grep -qi -- "-*b") && B="Y"
+(echo $@ | grep -qi -- "-s1") && TL="S1"
+(echo $@ | grep -qi -- "-s2") && TL="S2"
+(echo $@ | grep -qi -- "-w1") && TL="W1"
+(echo $@ | grep -qi -- "-w2") && TL="W2"
 
 T=$(echo ${TL} | cut -c1)
 L=$(echo ${TL} | cut -c2)
