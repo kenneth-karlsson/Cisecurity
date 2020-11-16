@@ -1,7 +1,7 @@
 #! /bin/bash
 
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20200810-draft
+VERSION=20201115-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -51,7 +51,7 @@ The .cisrc file is created when executing script for the first time.
 If you are logged in as root, make sure you can still log in after executing in update mode before logging out.
 
 To disable individual benchmarks set variable W and S to 3.
-To exit after an individual benchmark, set variable W or S to 0. This is only for debugging purposes.
+To exit before an individual benchmark, set variable W or S to 0. This is only for debugging purposes.
 
 Developed just for fun by Kenneth Karlsson. (kenneth.karlsson@workaholics.se)\n" && exit 
  
@@ -158,12 +158,17 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'ADMINSPACELEFT="halt"                              # Admin_space_left_action in audit log.     ' >> ${CISRC}
     echo -e 'ROOTLOGIN="console tty1 tty2 tty3 tty4 tty5 tty6"  # Secure root login.                        ' >> ${CISRC}
 
-    while read FILE; do
-        echo -e "##SUID## ${FILE}" >> ${CISRC}
+    while IFS= read -r FILE; do
+        printf '##SUID## %s\n' "${FILE}" >> ${CISRC}
     done < <(df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -4000 2>/dev/null | sort)
-    while read FILE; do
-        echo -e "##SGID## ${FILE}" >> ${CISRC}
+
+    while IFS= read -r FILE; do
+        printf '##SGID## %s\n' "${FILE}" >> ${CISRC}
     done < <(df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -2000 2>/dev/null | sort)
+
+    while IFS= read -r FILE; do
+        printf '##APTK## %s\n' "${FILE}" >> ${CISRC}
+    done < <(apt-key list 2>/dev/null)
 
     echo -e "\nCISRC file ${CISRC} has now be created. Edit to suit system requirements."
     echo -e "\nDO NOT EXECUTE SCRIPT ON PRODUCTION SERVERS IN UPDATE MODE.\n"
@@ -304,7 +309,7 @@ function update_chage() {
 # Returns status of a systemctl service.
 # Parameter 1 = service name
 function check_systemctl() {
-    if [[ $(systemctl is-enabled ${1}) = "enabled" ]]; then
+    if [[ $(systemctl is-enabled ${1} 2>/dev/null) = "enabled" ]]; then
         prn "System ${1} is enabled."
     else
         prw "System ${1} is not enabled."
@@ -367,9 +372,9 @@ function update_file() {
         CHECK=
         CHECK=$(stat -c "%U %G %a" ${1})
         case ${CHECK} in
-            "${2} ${3} ${4}")   prn "File ${1} has right permissions. ${2} ${3} ${4}" ;;
-            *)                  upd || prw "File ${1} has wrong permissions: ${CHECK}. This needs to be changed to ${2} ${3} ${4}"
-                                upd && prw "File ${1} has wrong permissions: ${CHECK}. Changing to ${2} ${3} ${4}"
+            "${2} ${3} ${4}")   prn "File ${1} has the right permissions. ${2} ${3} ${4}" ;;
+            *)                  upd || prw "File ${1} has the wrong permissions: ${CHECK}. This needs to be changed to ${2} ${3} ${4}"
+                                upd && prw "File ${1} has the wrong permissions: ${CHECK}. Changing to ${2} ${3} ${4}"
                                 upd && chown ${2}:${3} ${1}
                                 upd && chmod ${4} ${1} ;;
         esac
@@ -468,10 +473,8 @@ function update_conf() {
                 0)  if  [[ ${STR} = ${REP} ]]; then
                         prn "File ${1} already contains: ${REP}."
                     else
-                        upd || prw "File ${1} has:${STR}."
-                        upd || prw "This needs to be changed to:${REP}."
-                        upd && prw "File ${1} has:${STR}."
-                        upd && prw "Changing to:${REP}."
+                        upd || prw "File ${1} has:${STR}. This needs to be changed to:${REP}."
+                        upd && prw "File ${1} has:${STR}. Changing to:${REP}."
                         upd && sed -i "/^${STR}/ c ${REP}" ${1}
                     fi ;;
                 *)  upd || prw "File ${1} does not contain: ${REP}. It needs to be added."
@@ -515,10 +518,10 @@ NO=1.1.3;     W=1; S=1; E=; SC=;  BD='Ensure nodev option set on /tmp partition'
 lev && (update_fstab /tmp 'defaults,nodev,nosuid,noexec')
 
 NO=1.1.4;     W=1; S=1; E=; SC=;  BD='Ensure nosuid option set on /tmp partition'
-lev  # Updated in 1.1.4
+lev  # Updated in 1.1.3
 
 NO=1.1.5;     W=1; S=1; E=; SC=;  BD='Ensure noexec option set on /tmp partition'
-lev  # Updated in 1.1.4
+lev  # Updated in 1.1.3
 
 NO=1.1.6;     W=2; S=2; E=; SC=;  BD='Ensure separate partition exists for /var'
 lev && (check_fstab /var)
@@ -605,7 +608,26 @@ lev && (
 )
 
 NO=1.2.2;     W=1; S=1; E=; SC=N; BD='Ensure GPG keys are configured'
-lev  # Check key list with apt-key list
+lev && (
+    apt-key list 2> /dev/null >${TMP2}
+    grep '##APTK##' ${CISRC} | cut -c10- > ${TMP1}
+    diff ${TMP1} ${TMP2} > /dev/null 2>&1
+    case $? in
+        0)  prn "No extra apt keys found." ;;
+        *)  prw "Unknown apt key found."
+            diff ${TMP1} ${TMP2} >> ${CISWARNLOG}
+            upd && (
+                read -p "Do you want to reset apt key baseline in ${CISRC} N/y: " ANS
+                case ${ANS} in
+                    [yY]*)  sed -i "/^##APTK##/ d " ${CISRC}
+                            while IFS= read FILE; do
+                                printf '##APTK## %s\n' "${FILE}" >> ${CISRC}
+                            done < <(apt-key list 2>/dev/null) ;;
+                esac
+            ) ;;
+    esac
+)
+
 
 NO=1.3.1;     W=1; S=1; E=; SC=;  BD='Ensure sudo is installed'
 lev && (
@@ -703,7 +725,8 @@ lev && (
 
 NO=1.7.1.1;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is installed'
 lev && (
-    install_package apparmor-utils
+    upd && install_package apparmor
+    upd && install_package apparmor-utils
     upd && aa-enforce /etc/apparmor.d/*
 )
 
@@ -752,6 +775,7 @@ lev && (
         update_conf /etc/gdm3/greeter.dconf-defaults '\[org/gnome/login-screen\]'
         update_conf /etc/gdm3/greeter.dconf-defaults 'banner-message-enable' 'banner-message-enable=true'
         update_conf /etc/gdm3/greeter.dconf-defaults "banner-message-text" "banner-message-text='Authorized uses only. All activity may be monitored and reported.'"
+        upd && dpkg-reconfigure gdm3
     else
         prn "Gnome is not installed."
     fi
@@ -766,13 +790,12 @@ lev && (
             upd && apt -y upgrade
             upd && apt -y autoremove
             upd && apt -y autoclean
-            upd || prn "No of patches available for installation: $(apt list --upgradable 2> /dev/null | grep '/' | wc -l)" ;;
+            upd || prn "Number of patches available for installation: $(apt list --upgradable 2> /dev/null | grep '/' | wc -l)" ;;
         *)  prn "The internet is not accessible" ;;
     esac
 )
 
 NO=2.1.1;     W=1; S=1; E=; SC=;  BD='Ensure xinetd is not installed'
-# Systemd is used by Ubuntu
 lev && (remove_package xinetd)
 
 NO=2.1.2;     W=1; S=1; E=; SC=;  BD='Ensure openbsd-inetd is not installed'
@@ -794,7 +817,7 @@ lev && (
 )
 
 NO=2.2.1.2;   W=1; S=1; E=; SC=;  BD='Ensure systemd-timesyncd is configured'
-lev && (check_systemctl systemd-timesyncd.service) 
+lev && [[ ${NT} = systemd ]] && (check_systemctl systemd-timesyncd.service) 
 
 NO=2.2.1.3;   W=1; S=1; E=; SC=;  BD='Ensure chrony is configured'
 lev && [[ ${NT} = chrony ]] && (
@@ -830,7 +853,7 @@ lev && [[ -z ${SSLAPD} ]] && (remove_package slapd)
 
 NO=2.2.7;     W=1; S=1; E=; SC=;  BD='Ensure NFS and RPC are not enabled'
 lev && [[ -z ${SNFS} ]] && (
-        remove_package nfs-server
+        remove_package nfs-kernel-server
         remove_package rpcbind
 )
 
@@ -844,7 +867,10 @@ NO=2.2.10;    W=1; S=1; E=; SC=;  BD='Ensure HTTP server is not enabled'
 lev && [[ -z ${SAPACHE} ]] && (remove_package apache2)
 
 NO=2.2.11;    W=1; S=1; E=; SC=;  BD='Ensure email services are not enabled'
-lev && [[ -z ${SDOVECOT} ]] && (remove_package dovecot)
+lev && [[ -z ${SDOVECOT} ]] && (
+    remove_package dovecot-imapd
+    remove_package dovecot-pop3d
+)
 
 NO=2.2.12;    W=1; S=1; E=; SC=;  BD='Ensure Samba is not enabled'
 lev && [[ -z ${SSAMBA} ]] && (remove_package samba)
@@ -891,7 +917,7 @@ lev && (remove_package ldap-utils)
 NO=2.4;     W=1; S=1; E=; SC=;  BD='Ensure nonessential services are removed or masked'
 lev && (
     prn "Check list of listening open ports below."
-    lsof -i -P -n | grep -v "(ESTABLISHED)" >> ${CISLOG}
+    lsof -i -P -n | grep -v "(ESTABLISHED)" | tee -a ${CISLOG}
 )
 
 NO=3.2.1;     W=1; S=1; E=; SC=;  BD='Ensure packet redirect sending is disabled'
@@ -1251,7 +1277,7 @@ lev && (
 NO=3.8;       W=2; S=2; E=; SC=N; BD='Disable IPv6'
 lev && [[ -z ${IPV6} ]] && (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
-        err && update_file /boot/grub/grub.cfg root root 400
+        update_grub
 )
 
 NO=4.1.1.1;   W=2; S=2; E=; SC=;  BD='Ensure auditd is installed'
@@ -1821,9 +1847,9 @@ lev && (
             upd && (
                 read -p "Do you want to reset SUID files baseline in ${CISRC} N/y: " ANS
                 case ${ANS} in
-                    y*|Y*)  sed -i "/^##SUID##/ d " ${CISRC}
-                            while read FILE; do
-                                echo -e "##SUID## ${FILE}" >> ${CISRC}
+                    [yY]*)  sed -i "/^##SUID##/ d " ${CISRC}
+                            while IFS= read -r FILE; do
+                                printf '##SUID## %s\n' "${FILE}" >> ${CISRC}
                             done < <(df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -4000 2>/dev/null | sort) ;;
                 esac 
             ) ;;
@@ -1842,9 +1868,9 @@ lev && (
             upd && (
                 read -p "Do you want to reset SGID files baseline in ${CISRC} N/y: " ANS
                 case ${ANS} in
-                    y*|Y*)  sed -i "/^##SGID##/ d " ${CISRC}
-                            while read FILE; do
-                                echo -e "##SGID## ${FILE}" >> ${CISRC}
+                    [yY]*)  sed -i "/^##SGID##/ d " ${CISRC}
+                            while IFS= read -r FILE; do
+                                printf '##SGID## %s\n' "${FILE}" >> ${CISRC}
                             done < <(df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -2000 2>/dev/null | sort) ;;
                 esac
             ) ;;
