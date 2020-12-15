@@ -1,7 +1,14 @@
 #! /bin/bash
 
+# Check shell type
+echo $BASH | grep -v bash
+case $? in
+    0) echo "This script must be run with Bash."
+       exit 1 ;;
+esac
+
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20201213-draft
+VERSION=20201215-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -966,6 +973,20 @@ NO=3.3.4;     W=1; S=1; E=; SC=;  BD='Ensure suspicious packets are logged'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.log_martians' 'net.ipv4.conf.all.log_martians = 1'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.log_martians' 'net.ipv4.conf.default.log_martians = 1'
+    if [[ -s /etc/ufw/sysctl.conf ]]; then
+        grep -q ^net.ipv4.conf.all.log_martians /etc/ufw/sysctl.conf
+        case $? in
+            0) upd || prw 'File /etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.all.log_martians. This must be fixed.'
+               upd && prw 'File /etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.all.log_martians. Fixing.'
+               upd && sed -i "/^net.ipv4.conf.all.log_martians/ c #net.ipv4.conf.all.log_martians" /etc/ufw/sysctl.conf ;;
+        esac
+        grep -q ^net.ipv4.conf.default.log_martians /etc/ufw/sysctl.conf
+        case $? in
+            0) upd || prw '/etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.default.log_martians. This must be fixed.'
+               upd && prw '/etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.default.log_martians. Fixing.'
+               upd && sed -i "/^net.ipv4.conf.default.log_martians/ c #net.ipv4.conf.default.log_martians" /etc/ufw/sysctl.conf ;;
+        esac
+    fi
 )
 
 NO=3.3.5;     W=1; S=1; E=; SC=;  BD='Ensure broadcast ICMP requests are ignored'
@@ -2191,13 +2212,17 @@ lev && (
     update_conf /etc/bash.bashrc 'export HISTTIMEFORMAT' 'export HISTTIMEFORMAT="%F %T "'
     update_conf /etc/bash.bashrc 'export HISTCONTROL' 'export HISTCONTROL==ignoreboth:erasedups'
     update_conf /etc/bash.bashrc 'set -o vi'
+    update_conf /etc/vim/vimrc 'set showcmd'
+    update_conf /etc/vim/vimrc 'set showmatch'
+    update_conf /etc/vim/vimrc 'set ignorecase'
+    update_conf /etc/vim/vimrc 'set incsearch'
     update_conf /etc/vim/vimrc 'set tabstop=4'
     update_conf /etc/vim/vimrc 'set softtabstop=0'
     update_conf /etc/vim/vimrc 'set expandtab'
     update_conf /etc/vim/vimrc 'set shiftwidth=4'
     update_conf /etc/vim/vimrc 'set smarttab'
-    update_conf /etc/sysctl.d/local.conf 'net.core.default_qdisc=fq'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv4.tcp_congestion_control=bbr'
+    update_conf /etc/sysctl.d/local.conf 'net.core.default_qdisc=fq'              #BBR
+    update_conf /etc/sysctl.d/local.conf 'net.ipv4.tcp_congestion_control=bbr'    #BBR
 )
 
 qte || (

@@ -1,7 +1,14 @@
 #! /bin/bash
 
+# Check shell type
+echo $BASH | grep -v bash
+case $? in
+    0) echo "This script must be run with Bash."
+       exit 1 ;;
+esac
+
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
-VERSION=20201213-draft
+VERSION=20201215-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -935,7 +942,7 @@ lev && (
     lsof -i -P -n | grep -v "(ESTABLISHED)" | tee -a ${CISLOG}
 )
 
-NO=3.1.1;       W=1; S=1; E=; SC=N; BD='Disable IPv6'
+NO=3.1.1;       W=2; S=2; E=; SC=N; BD='Disable IPv6'
 lev && [[ -z ${IPV6} ]] && (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
         update_grub
@@ -994,7 +1001,15 @@ lev && (
     if [[ -s /etc/ufw/sysctl.conf ]]; then
         grep -q ^net.ipv4.conf.all.log_martians /etc/ufw/sysctl.conf
         case $? in
-            0) prw 'File /etc/ufw/sysctl.conf overrides /etc/sysctl.conf. Edit manually.' ;;
+            0) upd || prw 'File /etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.all.log_martians. This must be fixed.'
+               upd && prw 'File /etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.all.log_martians. Fixing.' 
+               upd && sed -i "/^net.ipv4.conf.all.log_martians/ c #net.ipv4.conf.all.log_martians" /etc/ufw/sysctl.conf ;;
+        esac
+        grep -q ^net.ipv4.conf.default.log_martians /etc/ufw/sysctl.conf
+        case $? in
+            0) upd || prw '/etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.default.log_martians. This must be fixed.'
+               upd && prw '/etc/ufw/sysctl.conf overrides /etc/sysctl.conf with parameter net.ipv4.conf.default.log_martians. Fixing.' 
+               upd && sed -i "/^net.ipv4.conf.default.log_martians/ c #net.ipv4.conf.default.log_martians" /etc/ufw/sysctl.conf ;;
         esac
     fi
 )
@@ -2188,7 +2203,7 @@ lev && (
     err || prn "Shadow group account does not have any users." 
 )
 
-NO=9.9.9.9;    W=1; S=1; E=; SC=;  BD='Extra personal settings'
+NO=9.9.9.9;    W=3; S=3; E=; SC=;  BD='Extra personal settings'
 lev && (
     update_conf /etc/bash.bashrc 'export HISTTIMEFORMAT' 'export HISTTIMEFORMAT="%F %T "'
     update_conf /etc/bash.bashrc 'export HISTCONTROL' 'export HISTCONTROL==ignoreboth:erasedups'
