@@ -1,14 +1,14 @@
 #! /bin/bash
 
 # Check shell type
-echo $BASH | grep -v bash
+echo ${BASH} | grep -qv bash
 case $? in
-    0) echo "This script must be run with Bash."
+    0) echo "This script must be executed with bash."
        exit 1 ;;
 esac
 
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20201215-draft
+VERSION=20201216-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -81,6 +81,7 @@ LOGDIR="${CISDIR}/log"                         # Name of log folder.
 CISLOG="${LOGDIR}/cis-${DATE}.log"             # Name of log-file for all messages.
 CISWARNLOG="${LOGDIR}/ciswarn-${DATE}.log"     # Name of log-file for all warning messages. If empty then system is hardened.
 CISRC="${CISDIR}/.cisrc"                       # This file must be in disk partition with exec permissions.
+CISRCNO=65                                     # Number of paramters in .cisrc file.
 TMP1=/tmp/cistmp1.$$                           # Temp file 1.
 TMP2=/tmp/cistmp2.$$                           # Temp file 2.
 [[ -d ${LOGDIR} ]] || mkdir -m 600 ${LOGDIR}   # Create logfile directory.
@@ -92,7 +93,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
 (($? != 0)) && echo "net-tools is not installed. Please install before running script as ifconfig is required." && exit 1
 
 [[ -s ${CISRC} ]] || {
-    echo -e "#### Setup of computer specific parameters in ${CISRC} ####\n" >  ${CISRC}
+    echo -e "#### Setup of computer specific parameters in ${CISRC} ####" >  ${CISRC}
     IFS=.;read  IP1 IP2 IP3 IP4 SM1 SM2 SM3 SM4 <<< $(ifconfig | grep inet | grep -v 127 | awk {'print $2"."$4'});IFS=
     SMASK="$(echo $(echo "obase=2;${SM1}" | bc)$(echo "obase=2;${SM2}" | bc)$(echo "obase=2;${SM3}" | bc)$(echo "obase=2;${SM4}" | bc) | sed s/0//g)"
     INTNETWORK=$((IP1 & SM1)).$((IP2 & SM2)).$((IP3 & SM3)).$((IP4 & SM4))/${#SMASK}
@@ -200,6 +201,13 @@ apt list --installed 2> /dev/null | grep -q net-tools
 }
 
 [[ ! -s ${CISRC} ]] && echo -e "Could not find ${CISRC}. Check folder and file permissions." && exit 1
+
+CISRCCHECK=$(grep -v '##' .cisrc | wc -l)
+if [[ ${CISRCCHECK} -ne ${CISRCNO} ]]; then
+    echo "The number of parameters in ${CISRC} are ${CISRCCHECK} but should be ${CISRCNO}."
+    echo "Please review ${CISRC} or delete it in order to recreate it."
+    exit 1
+fi
 
 . ${CISRC}
 
