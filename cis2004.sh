@@ -1,9 +1,8 @@
 #! /bin/bash
 
 # Check shell type
-echo ${BASH} | grep -qv bash
-case $? in
-    0) echo "This script must be executed with bash."
+case ${BASH} in
+    '') echo "This script must be executed with bash."
        exit 1 ;;
 esac
 
@@ -1109,6 +1108,7 @@ NO=3.5.1.4;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
         ufw allow in on lo
+        ufw allow out from lo
         ufw deny in from 127.0.0.0/8
         [[ -z ${IPV6} ]] && ufw deny in from ::1
     )
