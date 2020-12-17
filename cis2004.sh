@@ -1,13 +1,13 @@
 #! /bin/bash
 
-# Check shell type
+# Check for bash
 case ${BASH} in
     '') echo "This script must be executed with bash."
        exit 1 ;;
 esac
 
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
-VERSION=20201216-draft
+VERSION=20201217-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -1110,7 +1110,7 @@ lev && [[ ${FW} = ufw ]] && (
         ufw allow in on lo
         ufw allow out from lo
         ufw deny in from 127.0.0.0/8
-        [[ -z ${IPV6} ]] && ufw deny in from ::1
+        ufw deny in from ::1
     )
 )
 

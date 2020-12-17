@@ -1,14 +1,13 @@
 #! /bin/bash
 
-# Check shell type
-echo ${BASH} | grep -qv bash
-case $? in
-    0) echo "This script must be executed with bash."
+# Check for bash
+case ${BASH} in
+    '') echo "This script must be executed with bash."
        exit 1 ;;
 esac
 
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20201216-draft
+VERSION=20201217-draft
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -1082,8 +1081,9 @@ NO=3.6.2.3;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
         ufw allow in on lo
+        ufw allow out from lo
         ufw deny in from 127.0.0.0/8
-        [[ -z ${IPV6} ]] && (ufw deny in from ::1)
+        ufw deny in from ::1
     )
 )
 
