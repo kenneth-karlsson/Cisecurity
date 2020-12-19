@@ -7,7 +7,7 @@ case ${BASH} in
 esac
 
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20201217-draft
+VERSION=20201219
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -92,6 +92,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
 (($? != 0)) && echo "net-tools is not installed. Please install before running script as ifconfig is required." && exit 1
 
 [[ -s ${CISRC} ]] || {
+    echo -e "Setup of computer specific parameters in ${CISRC}. Please wait."
     echo -e "#### Setup of computer specific parameters in ${CISRC} ####" >  ${CISRC}
     IFS=.;read  IP1 IP2 IP3 IP4 SM1 SM2 SM3 SM4 <<< $(ifconfig | grep inet | grep -v 127 | awk {'print $2"."$4'});IFS=
     SMASK="$(echo $(echo "obase=2;${SM1}" | bc)$(echo "obase=2;${SM2}" | bc)$(echo "obase=2;${SM3}" | bc)$(echo "obase=2;${SM4}" | bc) | sed s/0//g)"
@@ -534,7 +535,17 @@ NO=1.1.1.8;   W=2; S=2; E=; SC=;  BD='Ensure mounting of FAT filesystems is limi
 lev && (update_modprobe vfat)
 
 NO=1.1.2;     W=1; S=1; E=; SC=;  BD='Ensure /tmp is configured'
-lev && (check_fstab /tmp) 
+lev && (
+    check_fstab /tmp
+    if  [[ ! -f /etc/systemd/system/tmp.mount ]]; then
+        upd || prw "/etc/systemd/system/tmp.mount needs to be created."
+        upd && prn "Creating /etc/systemd/system/tmp.mount."
+        upd && cp /usr/share/systemd/tmp.mount /etc/systemd/system
+        upd && update_conf /etc/systemd/system/tmp.mount 'Options=mode=1777' 'Options=mode=1777,strictatime,nosuid,nodev,noexec'
+        upd && systemctl daemon-reload
+        upd && systemctl --now enable tmp.mount
+    fi
+)
 
 NO=1.1.3;     W=1; S=1; E=; SC=;  BD='Ensure nodev option set on /tmp partition'
 lev && (update_fstab /tmp 'defaults,nodev,nosuid,noexec')
