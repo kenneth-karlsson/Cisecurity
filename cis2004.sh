@@ -716,7 +716,7 @@ lev && [[ $GRP ]] && (
                 grub-mkpasswd-pbkdf2 | tee ${TMP1} 
                 grep "^PBKDF2" -q ${TMP1}
                 case $? in
-                    0)  update_conf /etc/grub.d/${GRF} "set superusers=${SUDOUSR:-root}"
+                    0)  update_conf /etc/grub.d/${GRF} "set superusers=\"${SUDOUSR:-root}\""
                         echo -e "password_pbkdf2 ${SUDOUSR:-root} $(grep "^PBKDF2" ${TMP1} | awk -F "is " '{print $2}')" >> /etc/grub.d/${GRF}
                         update_grub ;;
                 esac ;;
@@ -959,7 +959,7 @@ lev && (
 )
 
 NO=3.1.1;       W=2; S=2; E=; SC=N; BD='Disable IPv6'
-lev && [[ -z ${IPV6} ]] && (
+lev && [[ ${IPV6} ]] || (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
         update_grub
 )
@@ -1108,8 +1108,8 @@ lev && [[ ${FW} = ufw ]] && (
     pfw && (
         (ufw status | grep -qw "active") || ufw enable
         (ufw status | grep -qi "active") || prw "ufw needs to be enabled."
-        [[ -z ${IPV6} ]] || (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
-        [[ -z ${IPV6} ]] && (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
+        [[ ${IPV6} ]] && (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
+        [[ ${IPV6} ]] || (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
     )
 )
 
@@ -1117,14 +1117,18 @@ NO=3.5.1.4;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
         ufw allow in on lo
-        ufw allow out from lo
+        ufw allow out on lo
         ufw deny in from 127.0.0.0/8
-        ufw deny in from ::1
+        [[ ${IPV6} ]] && ufw deny in from ::1
     )
 )
 
 NO=3.5.1.5;   W=1; S=1; E=; SC=N;  BD='Ensure outbound connections are configured'
-lev && [[ ${FW} = ufw ]] && (pfw && ufw default allow outgoing)
+lev && [[ ${FW} = ufw ]] && (
+    pfw && ufw allow out 53
+    pfw && ufw allow out 80
+    pfw && ufw allow out 443
+)
 
 NO=3.5.1.6;   W=1; S=1; E=; SC=N;  BD='Ensure firewall rules exist for all open ports'
 lev && [[ ${FW} = ufw ]] && (
@@ -1159,6 +1163,7 @@ NO=3.5.1.7;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
         ufw default deny incoming
+        ufw default deny outgoing
         ufw default deny routed
     )
 )
@@ -1191,7 +1196,7 @@ NO=3.5.2.6;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft add rule inet filter input iif lo accept
     pfw && nft create rule inet filter input ip saddr 127.0.0.0/8 counter drop
-    pfw && [[ -z ${IPV6} ]] && nft add rule inet filter input ip6 saddr ::1 counter drop
+    pfw && [[ ${IPV6} ]] || nft add rule inet filter input ip6 saddr ::1 counter drop
 )
 
 NO=3.5.2.7;   W=1; S=1; E=; SC=N;  BD='Ensure outbound and established connections are configured'

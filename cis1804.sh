@@ -1076,14 +1076,15 @@ lev && [[ ${FW} = ufw ]] && (
     pfw && (
         (ufw status | grep -qw "active") || ufw enable
         (ufw status | grep -qi "active") || prw "ufw needs to be enabled."
-        [[ -z ${IPV6} ]] || (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
-        [[ -z ${IPV6} ]] && (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
+        [[ ${IPV6} ]] && (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
+        [[ ${IPV6} ]] || (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
     )
 )
 
 NO=3.6.2.2;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
 lev && [[ ${FW} = ufw ]] && (
     pfw && ufw default deny incoming
+    pfw && ufw default deny outgoing
     pfw && ufw default deny routed
 )
 
@@ -1091,14 +1092,19 @@ NO=3.6.2.3;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
         ufw allow in on lo
-        ufw allow out from lo
+        ufw allow out on lo
         ufw deny in from 127.0.0.0/8
-        ufw deny in from ::1
+        [[ ${IPV6} ]] && ufw deny in from ::1
     )
 )
 
 NO=3.6.2.4;   W=1; S=1; E=; SC=N;  BD='Ensure outbound connections are configured'
-lev && [[ ${FW} = ufw ]] && (pfw && ufw default allow outgoing)
+lev && [[ ${FW} = ufw ]] && (
+    pfw && ufw allow out 53
+    pfw && ufw allow out 80
+    pfw && ufw allow out 443
+)
+
 
 NO=3.6.2.5;   W=1; S=1; E=; SC=N;  BD='Ensure firewall rules exist for all open ports'
 lev && [[ ${FW} = ufw ]] && (
@@ -1347,7 +1353,7 @@ lev && (
 )
 
 NO=3.8;       W=2; S=2; E=; SC=N; BD='Disable IPv6'
-lev && [[ -z ${IPV6} ]] && (
+lev && [[ ${IPV6} ]] || (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
         update_grub
 )
