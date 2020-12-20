@@ -7,7 +7,7 @@ case ${BASH} in
 esac
 
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
-VERSION=20201219
+VERSION=20201220
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -1084,7 +1084,6 @@ lev && [[ ${FW} = ufw ]] && (
 NO=3.6.2.2;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
 lev && [[ ${FW} = ufw ]] && (
     pfw && ufw default deny incoming
-    pfw && ufw default deny outgoing
     pfw && ufw default deny routed
 )
 
@@ -1099,10 +1098,7 @@ lev && [[ ${FW} = ufw ]] && (
 )
 
 NO=3.6.2.4;   W=1; S=1; E=; SC=N;  BD='Ensure outbound connections are configured'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && ufw allow out on all
-    pfw || prw "ufw needs to be updated."
-)
+lev && [[ ${FW} = ufw ]] && (pfw && ufw default allow outgoing)
 
 NO=3.6.2.5;   W=1; S=1; E=; SC=N;  BD='Ensure firewall rules exist for all open ports'
 lev && [[ ${FW} = ufw ]] && (
