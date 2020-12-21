@@ -1,13 +1,14 @@
 #! /bin/bash
 
+
+VERSION=20201221
+################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
+
 # Check for bash
 case ${BASH} in
     '') echo "This script must be executed with bash."
        exit 1 ;;
 esac
-
-################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
-VERSION=20201220
 
 [[ ${USER} != root ]] && echo -e "\n\nPlease execute with sudo or as root.\n" && exit 1
 
@@ -1125,9 +1126,12 @@ lev && [[ ${FW} = ufw ]] && (
 
 NO=3.5.1.5;   W=1; S=1; E=; SC=N;  BD='Ensure outbound connections are configured'
 lev && [[ ${FW} = ufw ]] && (
-    pfw && ufw allow out 53
-    pfw && ufw allow out 80
-    pfw && ufw allow out 443
+    pfw && ufw logging on
+    pfw && ufw allow out http
+    pfw && ufw allow out https
+    pfw && ufw allow out ntp
+    pfw && ufw allow out dns
+    pfw && ufw allow out git
 )
 
 NO=3.5.1.6;   W=1; S=1; E=; SC=N;  BD='Ensure firewall rules exist for all open ports'
