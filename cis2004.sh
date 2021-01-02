@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20201221
+VERSION=20210102
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -271,11 +271,9 @@ function lev() {
         exit
     fi
     if [[ ${T} == W && ${W} -le ${L} ]] || [[ ${T} == S && ${S} -le ${L} ]]; then
-        case ${SC} in
-            N) SCP="Manual   " ;;
-            *) SCP="Automated" ;;
-        esac
-        [[ ${B} ]] && printf "%-12s :%-8s :%-8s :%-12s :%-s\n" "${NO}" "WS = ${W}" "SV = ${S}" "${SCP}" "${BD}" | tee -a ${CISLOG}
+        SCP="Automated"
+        [[ ${SC} ]] && SCP="Manual   "
+        [[ ${B} ]]  && printf "%-12s :%-8s :%-8s :%-12s :%-s\n" "${NO}" "WS = ${W}" "SV = ${S}" "${SCP}" "${BD}" | tee -a ${CISLOG}
         return 0
     else
         return 1
@@ -1063,21 +1061,6 @@ lev && (
     reload_sysctl
 )
 
-#NO=3.4.1;     W=1; S=1; E=; SC=N; BD='Ensure TCP Wrappers is installed'
-#lev && [[ -z ${PTCPD} ]] && (install_package tcpd)
-
-#NO=3.4.2;     W=1; S=1; E=; SC=;  BD='Ensure /etc/hosts.allow is configured'
-#lev && [[ ${INTNETWORK} ]] && (update_conf /etc/hosts.allow "ALL: ${INTNETWORK}")
-
-#NO=3.4.3;     W=1; S=1; E=; SC=;  BD='Ensure /etc/hosts.deny is configured'
-#lev && $(grep -v  -E "^#|^$" /etc/hosts.allow | grep -q "[a-z,A-Z,0-9]") && (update_conf /etc/hosts.deny "ALL: ALL")
-
-#NO=3.4.4;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/hosts.allow are configured'
-#lev && (update_file /etc/hosts.allow root root 644)
-
-#NO=3.4.5;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/hosts.deny are configured'
-#lev && (update_file /etc/hosts.deny root root 644)
-
 NO=3.4.1;     W=1; S=1; E=; SC=N; BD='Ensure DCCP is disabled'
 lev && [[ -z ${PDCCP} ]] && (update_modprobe dccp)
 
@@ -1577,7 +1560,7 @@ NO=4.2.1.8;   W=1; S=1; E=; SC=N; BD='Ensure syslog-ng logging is configured'
 lev && [[ ${SL} = "syslog-ng" ]] && (update_file /etc/syslog-ng/conf.d/syslog-ng.conf root root 640)
 
 NO=4.2.1.9;   W=1; S=1; E=; SC=;  BD='Ensure syslog-ng default file permissions configured'
-    # edit /etc/syslog-ng/syslog-ng.conf
+lev # edit /etc/syslog-ng/syslog-ng.conf
     #options { chain_hostnames(off); flush_lines(0); perm(0640); stats_freq(3600); threaded(yes); };
 
 NO=4.2.1.10;  W=1; S=1; E=; SC=N; BD='Ensure syslog-ng is configured to send logs to a remote log host'
