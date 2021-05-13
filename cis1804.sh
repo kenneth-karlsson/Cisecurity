@@ -1,6 +1,6 @@
 #! /bin/bash
 
-VERSION=20201221
+VERSION=20210513
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
 
 # Check for bash
@@ -13,7 +13,13 @@ esac
 
 (echo $@ | grep -qi "\-v") && echo -e "Version: ${VERSION}" &&  exit
 
-(echo $@ | grep -qi "\-l") && echo -e "https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode" && exit
+(echo $@ | grep -qi "\-l") && echo -e "
+his script is released under https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.
+
+It utilizes CIS IP which is licensed in accordance with the
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International terms here:
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.\n" && exit
+
 
 (echo $@ | grep -qi "\-d") && echo -e "
 DISCLAIMER:
@@ -24,7 +30,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE." && exit
+SOFTWARE.\n" && exit
 
 (echo $@ | grep -qi -E "\-h|--help") && echo -e "
 Usage: sudo $0
@@ -80,7 +86,7 @@ LOGDIR="${CISDIR}/log"                         # Name of log folder.
 CISLOG="${LOGDIR}/cis-${DATE}.log"             # Name of log-file for all messages.
 CISWARNLOG="${LOGDIR}/ciswarn-${DATE}.log"     # Name of log-file for all warning messages. If empty then system is hardened.
 CISRC="${CISDIR}/.cisrc"                       # This file must be in disk partition with exec permissions.
-CISRCNO=65                                     # Number of paramters in .cisrc file.
+CISRCNO=70                                     # Number of paramters in .cisrc file.
 TMP1=/tmp/cistmp1.$$                           # Temp file 1.
 TMP2=/tmp/cistmp2.$$                           # Temp file 2.
 [[ -d ${LOGDIR} ]] || mkdir -m 600 ${LOGDIR}   # Create logfile directory.
@@ -177,6 +183,11 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'ACTIONMAILACCT="root"                              # action_mail_acctt in audit log.           ' >> ${CISRC}
     echo -e 'ADMINSPACELEFT="halt"                              # Admin_space_left_action in audit log.     ' >> ${CISRC}
     echo -e 'ROOTLOGIN="console tty1 tty2 tty3 tty4 tty5 tty6"  # Secure root login.                        ' >> ${CISRC}
+    echo -e 'MOTD=""                                                                                        ' >> ${CISRC}
+    echo -e 'MESSAGE1="NOTICE!"                                                                             ' >> ${CISRC}
+    echo -e 'MESSAGE2="This is a private system. Do not attempt to log in unless you are authorized."       ' >> ${CISRC}
+    echo -e 'MESSAGE3="Any authorized or unauthorized access and use may be monitored and can"              ' >> ${CISRC}
+    echo -e 'MESSAGE4="result in criminal and civil prosecution under applicable law."                      ' >> ${CISRC}
 
     while IFS= read -r FILE; do
         printf '##SUID## %s\n' "${FILE}" >> ${CISRC}
@@ -405,18 +416,25 @@ function update_file() {
 }
 
 # Updates message file  with standard text.
-# Parameter 1 = file name (motd,issue,issue.net)
+# Parameter 1 = file name (issue,issue.net)
+
 function update_message() {
     if  [[ ! -s "${1}" ]]; then
-        upd || prw "File ${1} not found. It needs to be updated with standard text."
-        upd && prw "File ${1} not found. Updating with standard text."
-        upd && echo -e "Authorized use only. All activity may be monitored and reported.\n" > ${1}
+        upd || prw "File ${1} not found. It needs to be updated with a standard text."
+        upd && prw "File ${1} not found. Updating with a standard text."
+        case ${1} in
+            *motd) upd && echo -e "${MOTD}" > ${1} ;;
+                *) upd && echo -e "${MESSAGE1}\n${MESSAGE2}\n${MESSAGE3}\n${MESSAGE4}\n" > ${1} ;;
+        esac
     else
         grep -E -q '(\\v|\\r|\\m|\\s|Ubuntu)' ${1}
         case $? in
             0)  upd || prw "File ${1} contains unauthorized text. It needs to be updated with a standard text."
-                upd && prw "File ${1} contains unauthorized text. Updating with standard a text."
-                upd && echo -e "\nAuthorized use only. All activity may be monitored and reported.\n" > ${1} ;;
+                upd && prw "File ${1} contains unauthorized text. Updating with a standard text."
+                case ${1} in
+                    *motd) upd && echo -e "${MOTD}" > ${1} ;;
+                        *) upd && echo -e "${MESSAGE1}\n${MESSAGE2}\n${MESSAGE3}\n${MESSAGE4}\n" > ${1} ;;
+                esac ;;
         esac
     fi
 }
@@ -760,7 +778,6 @@ NO=1.7.1.1;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is installed'
 lev && (
     upd && install_package apparmor
     upd && install_package apparmor-utils
-    upd && aa-enforce /etc/apparmor.d/*
 )
 
 NO=1.7.1.2;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is enabled in the bootloader configuration'
@@ -837,14 +854,18 @@ lev && (remove_package openbsd-inetd)
 NO=2.2.1.1;   W=1; S=1; E=; SC=N; BD='Ensure time synchronization is in use'
 lev && (
     case ${NT} in
-        systemd) remove_package   ntp 
-                 remove_package   chrony 
-                 systemctl enable systemd-timesyncd.service
-                 systemctl start  systemd-timesyncd.service ;;
-        chrony)  remove_package   ntp 
-                 install_package  chrony ;;
-        ntp)     remove_package   chrony
-                 install_package  ntp ;;
+        systemd) remove_package    ntp 
+                 remove_package    chrony 
+                 systemctl enable  systemd-timesyncd.service
+                 systemctl start   systemd-timesyncd.service ;;
+        chrony)  remove_package    ntp 
+                 install_package   chrony
+                 systemctl disable systemd-timesyncd.service
+                 systemctl stop    systemd-timesyncd.service ;;
+        ntp)     remove_package    chrony
+                 install_package   ntp
+                 systemctl disable systemd-timesyncd.service
+                 systemctl stop    systemd-timesyncd.service ;;
         *)       prw "${NT} is not set to systemd, chrony or ntp. Please correct parameters." ;;
     esac
 )
@@ -1103,8 +1124,8 @@ lev && [[ ${FW} = ufw ]] && (
     pfw && ufw logging on
     pfw && ufw allow out http
     pfw && ufw allow out https
-    pfw && ufw allow out ntp
-    pfw && ufw allow out dns
+    pfw && ufw allow out proto udp to any port ntp
+    pfw && ufw allow out proto udp to any port 53
     pfw && ufw allow out git
 )
 
@@ -1590,14 +1611,14 @@ lev && (update_conf /etc/systemd/journald.conf 'Storage' 'Storage=persistent')
 
 NO=4.2.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on all logfiles are configured'
 lev && (
-    [[ $(find /var/log -type f -perm /g=w,g=x,o=r,o=w,o=x | wc -l) -eq 0 ]] || {
+    [[ $(find /var/log -type f -perm /g+w,g+x,o+r,o+w,o+x | wc -l) -eq 0 ]] || {
         upd || prw "Some /var/log files have group w,x or other r,w,x permissions. This needs to be fixed."
         upd && prw "Some /var/log files have group w,x or other r,w,x permissions. Fixing!"
         upd && find /var/log -type f -exec chmod g-wx,o-rwx {} \; 
     }
     err  || prn "No /var/log files have group r,w or other r,w,x permissions."
     E=
-    [[ $(find /var/log -type d -perm /g=w,o=r,o=w,o=x | wc -l) -eq 0 ]] || {
+    [[ $(find /var/log -type d -perm /g+w,o+r,o+w,o+x | wc -l) -eq 0 ]] || {
         upd || prw "Some /var/log folders have group w or other r,w,x permissions. This needs to be fixed."
         upd && prw "Some /var/log folders have group w or other r,w,x permissions. Fixing!"
         upd && find /var/log -type d -exec chmod g-w,o-rwx {} \;
