@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20210102
+VERSION=20210513
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -14,7 +14,12 @@ esac
 
 (echo $@ | grep -qi "\-v") && echo -e "Version: ${VERSION}" &&  exit
 
-(echo $@ | grep -qi "\-l") && echo -e "https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode" && exit
+(echo $@ | grep -qi "\-l") && echo -e "
+This script is released under https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.
+
+It utilizes CIS IP which is licensed in accordance with the 
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International terms here:
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.\n" && exit
 
 (echo $@ | grep -qi "\-d") && echo -e "
 DISCLAIMER:
@@ -25,7 +30,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE." && exit
+SOFTWARE.\n" && exit
 
 (echo $@ | grep -qi -E "\-h|--help") && echo -e "
 Usage: sudo $0
@@ -43,7 +48,7 @@ Usage: sudo $0
 -w2 (Worksation level 2)
 
 The purpose of this script is to harden Ubuntu Linux systems.
-It is based on CIS Ubuntu Linux 20.04 LTS Benchmark v1.0.0 from www.cisecurity.org
+It is based on CIS Ubuntu Linux 20.04 LTS Benchmark v1.1.0 from www.cisecurity.org
 https://www.cisecurity.org/cis-securesuite/cis-securesuite-membership-terms-of-use/
 It has only been tested on Ubuntu 2004 X64.
 
@@ -81,7 +86,7 @@ LOGDIR="${CISDIR}/log"                         # Name of log folder.
 CISLOG="${LOGDIR}/cis-${DATE}.log"             # Name of log-file for all messages.
 CISWARNLOG="${LOGDIR}/ciswarn-${DATE}.log"     # Name of log-file for all warning messages. If empty then system is hardened.
 CISRC="${CISDIR}/.cisrc"                       # This file must be in disk partition with exec permissions.
-CISRCNO=65                                     # Number of paramters in .cisrc file.
+CISRCNO=69                                     # Number of paramters in .cisrc file.
 TMP1=/tmp/cistmp1.$$                           # Temp file 1.
 TMP2=/tmp/cistmp2.$$                           # Temp file 2.
 [[ -d ${LOGDIR} ]] || mkdir -m 600 ${LOGDIR}   # Create logfile directory.
@@ -143,7 +148,6 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'SSHTMOUT="300"                                     # Set ssh ClientAliveInterval.              ' >> ${CISRC}
     echo -e 'SSHCOMAX="3"                                       # Set ssh ClientAliveCountMax.              ' >> ${CISRC}
     echo -e 'SSHMAXSS="10"                                      # Set ssh MaxSessions.                      ' >> ${CISRC}
-    echo -e 'SL="rsyslog"                                       # Syslog server can be rsyslog or syslog-ng.' >> ${CISRC}
     echo -e 'FW="ufw"                                           # Firewall can be iptables,nftables or ufw. ' >> ${CISRC}
     echo -e 'PFW="Y"                                            # Update firewall rules.                    ' >> ${CISRC}
     echo -e '                                                   # Change PFW to N after first fw update.    ' >> ${CISRC}
@@ -176,6 +180,11 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'ACTIONMAILACCT="root"                              # action_mail_acctt in audit log.           ' >> ${CISRC}
     echo -e 'ADMINSPACELEFT="halt"                              # Admin_space_left_action in audit log.     ' >> ${CISRC}
     echo -e 'ROOTLOGIN="console tty1 tty2 tty3 tty4 tty5 tty6"  # Secure root login.                        ' >> ${CISRC}
+    echo -e 'MOTD=""                                                                                        ' >> ${CISRC}
+    echo -e 'MESSAGE1="NOTICE!"                                                                             ' >> ${CISRC}
+    echo -e 'MESSAGE2="This is a private system. Do not attempt to log in unless you are authorized."       ' >> ${CISRC}
+    echo -e 'MESSAGE3="Any authorized or unauthorized access and use may be monitored and can"              ' >> ${CISRC}
+    echo -e 'MESSAGE4="result in criminal and civil prosecution under applicable law."                      ' >> ${CISRC}
 
     while IFS= read -r FILE; do
         printf '##SUID## %s\n' "${FILE}" >> ${CISRC}
@@ -336,6 +345,7 @@ function check_systemctl() {
         prn "System ${1} is enabled."
     else
         prw "System ${1} is not enabled."
+        upd && systemctl --now enable ${1}
     fi
 }
 
@@ -405,18 +415,24 @@ function update_file() {
 }
 
 # Updates message file  with standard text.
-# Parameter 1 = file name (motd,issue,issue.net)
+# Parameter 1 = file name (issue,issue.net)
 function update_message() {
     if  [[ ! -s "${1}" ]]; then
-        upd || prw "File ${1} not found. It needs to be updated with standard text."
-        upd && prw "File ${1} not found. Updating with standard text."
-        upd && echo -e "Authorized use only. All activity may be monitored and reported.\n" > ${1}
+        upd || prw "File ${1} not found. It needs to be updated with a standard text."
+        upd && prw "File ${1} not found. Updating with a standard text."
+        case ${1} in
+            *motd) upd && echo -e "${MOTD}" > ${1} ;;
+                *) upd && echo -e "${MESSAGE1}\n${MESSAGE2}\n${MESSAGE3}\n${MESSAGE4}\n" > ${1} ;;
+        esac
     else
         grep -E -q '(\\v|\\r|\\m|\\s|Ubuntu)' ${1}
         case $? in
             0)  upd || prw "File ${1} contains unauthorized text. It needs to be updated with a standard text."
-                upd && prw "File ${1} contains unauthorized text. Updating with standard a text."
-                upd && echo -e "\nAuthorized use only. All activity may be monitored and reported.\n" > ${1} ;;
+                upd && prw "File ${1} contains unauthorized text. Updating with a standard text."
+                case ${1} in
+                    *motd) upd && echo -e "${MOTD}" > ${1} ;;
+                        *) upd && echo -e "${MESSAGE1}\n${MESSAGE2}\n${MESSAGE3}\n${MESSAGE4}\n" > ${1} ;;
+                esac ;;
         esac
     fi
 }
@@ -464,7 +480,6 @@ function disable_package() {
 # Removes package from system
 # Parameter 1 = package name
 function remove_package() {
-    #dpkg -l ${1} > /dev/null 2>&1
     apt list --installed 2> /dev/null | grep -q "^${1}\/"
     case $? in
         0)  upd || prw "Package ${1} is installed and needs to be removed." 
@@ -530,11 +545,11 @@ lev && (update_modprobe hfs)
 NO=1.1.1.5;   W=1; S=1; E=; SC=;  BD='Ensure mounting of hfsplus filesystems is disabled'
 lev && (update_modprobe hfsplus)
 
-NO=1.1.1.6;   W=1; S=1; E=; SC=;  BD='Ensure mounting of udf filesystems is disabled'
-lev && (update_modprobe udf)
+NO=1.1.1.6;   W=1; S=1; E=; SC=Y; BD='Ensure mounting of squashfs filesystems is disabled' #check
+lev && (update_modprobe squashfs)
 
-NO=1.1.1.7;   W=2; S=2; E=; SC=;  BD='Ensure mounting of FAT filesystems is limited'
-lev && (update_modprobe vfat)
+NO=1.1.1.7;   W=1; S=1; E=; SC=;  BD='Ensure mounting of udf filesystems is limited'
+lev && (update_modprobe udf)
 
 NO=1.1.2;     W=1; S=1; E=; SC=;  BD='Ensure /tmp is configured'
 lev && (
@@ -621,6 +636,7 @@ lev  # Updated in 1.1.19
 
 NO=1.1.21;    W=1; S=1; E=; SC=N; BD='Ensure noexec option set on removable media partitions'
 lev  # Updated in 1.1.19
+
 NO=1.1.22;    W=1; S=1; E=; SC=N; BD='Ensure sticky bit is set on all world-writable directories'
 lev && (
     df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d \( -perm -0002 -a ! -perm -1000 \) 2>/dev/null | grep -q "/"
@@ -666,24 +682,7 @@ lev && (
     esac
 )
 
-NO=1.3.1;     W=1; S=1; E=; SC=;  BD='Ensure sudo is installed'
-lev && (
-    install_package sudo
-    grep -q -E "^#includedir\s/etc/sudoers.d" /etc/sudoers
-    case $? in
-        0)  prn "Folder /etc/sudoers.d included in /etc/sudoers" ;;
-        *)  prw "Folder /etc/sudoers.d is not included in /etc/sudoers. Edit manually with visudo." ;;
-    esac
-    update_file /etc/sudoers.d/sudoers root root 440 '# Created by Cisecurity remediation script'
-)
-
-NO=1.3.2;     W=1; S=1; E=; SC=;  BD='Ensure sudo commands use pty'
-lev && (update_conf /etc/sudoers.d/sudoers 'Defaults use_pty')
-
-NO=1.3.3;     W=1; S=1; E=; SC=;  BD='Ensure sudo log file exists'
-lev && (update_conf /etc/sudoers.d/sudoers 'Defaults logfile="/var/log/sudo.log"')
-
-NO=1.4.1;     W=1; S=1; E=; SC=;  BD='Ensure AIDE is installed'
+NO=1.3.1;     W=1; S=1; E=; SC=;  BD='Ensure AIDE is installed'
 lev && (
     install_package aide
     install_package aide-common
@@ -694,7 +693,7 @@ lev && (
     fi
 )
 
-NO=1.4.2;     W=1; S=1; E=; SC=;  BD='Ensure filesystem integrity is regularly checked'
+NO=1.3.2;     W=1; S=1; E=; SC=;  BD='Ensure filesystem integrity is regularly checked'
 lev && (
     if  [[ -f /etc/cron.daily/aide ]]; then
         prn "Aide crontab is already installed."
@@ -703,7 +702,22 @@ lev && (
     fi
 )
 
-NO=1.5.1;     W=1; S=1; E=; SC=;  BD='Ensure bootloader password is set'
+NO=1.4.1;     W=1; S=1; E=; SC=;  BD='Ensure permissions on bootloader config are not overridden'
+lev && [[ $GRP ]] && (
+    if (grep -E '^\s*chmod\s+444\s+\$\{grub_cfg\}\.new' -A 1 -B1 /usr/sbin/grub-mkconfig >/dev/null)
+    then
+        upd && (
+            prw "Updating permissions settings in /usr/sbin/grub-mkconfig."
+            sed -ri 's/chmod\s+[0-7][0-7][0-7]\s+\$\{grub_cfg\}\.new/chmod 400 ${grub_cfg}.new/' /usr/sbin/grub-mkconfig
+            sed -ri 's/ && ! grep "\^password" \$\{grub_cfg\}.new >\/dev\/null//' /usr/sbin/grub-mkconfig
+        )
+        upd || (prw "Permissions settings in /usr/sbin/grub-mkconfig need to be changed to 400.")
+    else
+        prn "Permissions settings in /usr/sbin/grub-mkconfig have already been set."
+    fi
+)
+
+NO=1.4.2;     W=1; S=1; E=; SC=;  BD='Ensure bootloader password is set'
 lev && [[ $GRP ]] && (
     update_conf /etc/grub.d/10_linux 'CLASS="--class gnu-linux --class gnu --class os' 'CLASS="--class gnu-linux --class gnu --class os --unrestricted"'
     update_grub
@@ -723,10 +737,10 @@ lev && [[ $GRP ]] && (
     )
 )
 
-NO=1.5.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on bootloader config are configured'
+NO=1.4.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on bootloader config are configured'
 lev && (update_grub)
 
-NO=1.5.3;     W=1; S=1; E=; SC=;  BD='Ensure authentication required for single user mode'
+NO=1.4.4;     W=1; S=1; E=; SC=;  BD='Ensure authentication required for single user mode'
 lev && (
     grep -q "^root:[*\!]:" /etc/shadow
     case  $? in
@@ -737,20 +751,20 @@ lev && (
     err         || prn "Root password is already set."
 )
 
-NO=1.6.1;     W=1; S=1; E=; SC=N; BD='Ensure XD/NX support is enabled'
+NO=1.5.1;     W=1; S=1; E=; SC=N; BD='Ensure XD/NX support is enabled'
 lev && (
     journalctl  |  grep -q "protection: active"
     (($? != 0)) && prw "NX is not active. Check kernel."
     err         || prn "NX is active."
 )
 
-NO=1.6.2;     W=1; S=1; E=; SC=;  BD='Ensure address space layout randomization (ASLR) is enabled'
+NO=1.5.2;     W=1; S=1; E=; SC=;  BD='Ensure address space layout randomization (ASLR) is enabled'
 lev && (update_conf /etc/sysctl.d/local.conf 'kernel.randomize_va_space' 'kernel.randomize_va_space = 2')
 
-NO=1.6.3;     W=1; S=1; E=; SC=;  BD='Ensure prelink is disabled'
+NO=1.5.3;     W=1; S=1; E=; SC=;  BD='Ensure prelink is disabled'
 lev && (remove_package prelink)
 
-NO=1.6.4;     W=1; S=1; E=; SC=;  BD='Ensure core dumps are restricted'
+NO=1.5.4;     W=1; S=1; E=; SC=;  BD='Ensure core dumps are restricted'
 lev && (
     update_conf /etc/security/limits.conf '*   hard    core    0'
     update_conf /etc/sysctl.d/local.conf 'fs.suid_dumpable' 'fs.suid_dumpable = 0'
@@ -759,52 +773,83 @@ lev && (
     update_conf /etc/systemd/coredump.conf 'ProcessSizeMax' 'ProcessSizeMax=0'
 )
 
-NO=1.7.1.1;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is installed'
+NO=1.6.1.1;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is installed'
 lev && (
     upd && install_package apparmor
     upd && install_package apparmor-utils
-    upd && aa-enforce /etc/apparmor.d/*
 )
 
-NO=1.7.1.2;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is enabled in the bootloader configuration'
+NO=1.6.1.2;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is enabled in the bootloader configuration'
 lev && (
     update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="apparmor' 'GRUB_CMDLINE_LINUX="apparmor=1 security=apparmor"'
-    #update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX_DEFAULT' 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"'
     update_grub
 )
     
-NO=1.7.1.3;   W=1; S=1; E=; SC=;  BD='Ensure all AppArmor Profiles are in enforce or complain mode'
+NO=1.6.1.3;   W=1; S=1; E=; SC=;  BD='Ensure all AppArmor Profiles are in enforce or complain mode'
 lev && (
     upd && aa-complain /etc/apparmor.d/*
     qte || aa-status | grep complain
-    qte && aa-status | grep complain >> ${CISLOG}
+    qte && apparmor_status | grep profiles >> ${CISLOG}
+    qte && apparmor_status | grep processes >> ${CISLOG}
 )
     
-NO=1.7.1.4;   W=2; S=2; E=; SC=;  BD='Ensure all AppArmor Profiles are enforcing'
+NO=1.6.1.4;   W=2; S=2; E=; SC=;  BD='Ensure all AppArmor Profiles are enforcing'
 lev && (
     upd && aa-enforce /etc/apparmor.d/*
     qte || aa-status | grep enforce
-    qte && aa-status | grep enforce >> ${CISLOG}
+    qte && apparmor_status | grep profiles >> ${CISLOG}
+    qte && apparmor_status | grep processes >> ${CISLOG}
 )
     
-NO=1.8.1.1;   W=1; S=1; E=; SC=;  BD='Ensure message of the day is configured properly'
+NO=1.7.1;     W=1; S=1; E=; SC=;  BD='Ensure message of the day is configured properly'
 lev && (update_message /etc/motd)
 
-NO=1.8.1.2;   W=1; S=1; E=; SC=;  BD='Ensure local login warning banner is configured properly'
+NO=1.7.2;     W=1; S=1; E=; SC=;  BD='Ensure local login warning banner is configured properly'
 lev && (update_message /etc/issue)
 
-NO=1.8.1.3;   W=1; S=1; E=; SC=;  BD='Ensure remote login warning banner is configured properly'
+NO=1.7.3;     W=1; S=1; E=; SC=;  BD='Ensure remote login warning banner is configured properly'
 lev && (update_message /etc/issue.net)
 
-NO=1.8.1.4;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/motd are configured'
+NO=1.7.4;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/motd are configured'
 lev && (update_file /etc/motd root root 644)
 
-NO=1.8.1.5;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue are configured'
+NO=1.7.5;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue are configured'
 lev && (update_file /etc/issue root root 644)
 
-NO=1.8.1.6;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
+NO=1.7.6;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
 lev && (update_file /etc/issue.net root root 644)
 
+NO=1.8.1;     W=3; S=2; E=; SC=;  BD='Ensure GNOME Display Manager is removed'
+lev && (remove_package gdm3)
+
+NO=1.8.2;     W=1; S=1; E=; SC=;  BD='Ensure GDM login banner is configured'
+lev && (
+    if [[ -s /etc/gdm3/greeter.dconf-defaults ]]; then
+        update_conf /etc/gdm3/greeter.dconf-defaults '\[org/gnome/login-screen\]'
+        update_conf /etc/gdm3/greeter.dconf-defaults 'banner-message-enable' 'banner-message-enable=true'
+        update_conf /etc/gdm3/greeter.dconf-defaults "banner-message-text" "banner-message-text='Authorized users only. All activity may be monitored and reported.'"
+        upd && dpkg-reconfigure gdm3
+    else
+        prn "Gnome is not installed."
+    fi
+)
+
+NO=1.8.3;     W=3; S=1; E=; SC=;  BD='Ensure disable-user-list is configured'
+lev && (
+    if [[ -s /etc/gdm3/greeter.dconf-defaults ]]; then
+        update_conf /etc/gdm3/greeter.dconf-defaults 'disable-user-list' 'disable-user-list=true'
+        upd && dpkg-reconfigure gdm3
+    else
+        prn "Gnome is not installed."
+    fi
+)
+NO=1.8.4;     W=1; S=1; E=; SC=;  BD='Ensure XDCMP is not enabled'
+lev && (
+    if [[ -s /etc/gdm3/custom.conf ]]; then
+        update_conf /etc/gdm3/custom.conf 'enable=true' '#enable=true'
+    fi
+)
+   
 NO=1.9;       W=1; S=1; E=; SC=N; BD='Ensure updates, patches, and additional security software are installed'
 lev && (
     wget -q --spider http://google.com
@@ -819,103 +864,88 @@ lev && (
     esac
 )
 
-NO=1.10;     W=1; S=1; E=; SC=;  BD='Ensure GDM is removed or login is configured'
-lev && (
-    if [[ -s /etc/gdm3/greeter.dconf-defaults ]]; then
-        update_conf /etc/gdm3/greeter.dconf-defaults '\[org/gnome/login-screen\]'
-        update_conf /etc/gdm3/greeter.dconf-defaults 'banner-message-enable' 'banner-message-enable=true'
-        update_conf /etc/gdm3/greeter.dconf-defaults "banner-message-text" "banner-message-text='Authorized uses only. All activity may be monitored and reported.'"
-        update_conf /etc/gdm3/greeter.dconf-defaults 'disable-user-list' 'disable-user-list=true'
-        upd && dpkg-reconfigure gdm3
-    else
-        prn "Gnome is not installed."
-    fi
-)
-
-NO=2.1.1;     W=1; S=1; E=; SC=;  BD='Ensure xinetd is not installed'
-lev && (remove_package xinetd)
-
-NO=2.1.2;     W=1; S=1; E=; SC=;  BD='Ensure openbsd-inetd is not installed'
-lev && (remove_package openbsd-inetd)
-
-NO=2.2.1.1;   W=1; S=1; E=; SC=N; BD='Ensure time synchronization is in use'
+NO=2.1.1.1;   W=1; S=1; E=; SC=;  BD='Ensure time synchronization is in use'
 lev && (
     case ${NT} in
-        systemd) remove_package   ntp 
-                 remove_package   chrony 
-                 systemctl enable systemd-timesyncd.service
-                 systemctl start  systemd-timesyncd.service ;;
-        chrony)  remove_package   ntp 
-                 install_package  chrony ;;
-        ntp)     remove_package   chrony
-                 install_package  ntp ;;
+        systemd) remove_package    ntp 
+                 remove_package    chrony 
+                 systemctl enable  systemd-timesyncd.service
+                 systemctl start   systemd-timesyncd.service ;;
+        chrony)  remove_package    ntp 
+                 install_package   chrony
+                 systemctl disable systemd-timesyncd.service
+                 systemctl stop    systemd-timesyncd.service ;;
+        ntp)     remove_package    chrony
+                 install_package   ntp
+                 systemctl disable systemd-timesyncd.service
+                 systemctl stop    systemd-timesyncd.service ;;
         *)       prw "${NT} is not set to systemd, chrony or ntp. Please correct parameters." ;;
     esac
 )
 
-NO=2.2.1.2;   W=1; S=1; E=; SC=;  BD='Ensure systemd-timesyncd is configured'
+NO=2.1.1.2;   W=1; S=1; E=; SC=;  BD='Ensure systemd-timesyncd is configured'
 lev && [[ ${NT} = systemd ]] && (check_systemctl systemd-timesyncd.service) 
 
-NO=2.2.1.3;   W=1; S=1; E=; SC=;  BD='Ensure chrony is configured'
+NO=2.1.1.3;   W=1; S=1; E=; SC=;  BD='Ensure chrony is configured'
 lev && [[ ${NT} = chrony ]] && (
     prn "Edit /etc/chrony.d/chrony/chrony.conf manually if these settings are wrong."
     grep -E "^(server|pool)" /etc/chrony/chrony.conf
 )
 
-NO=2.2.1.4;   W=1; S=1; E=; SC=;  BD='Ensure ntp is configured'
+NO=2.1.1.4;   W=1; S=1; E=; SC=;  BD='Ensure ntp is configured'
 lev && [[ ${NT} = ntp ]] && (
     update_conf /etc/ntp.conf 'restrict -4 default kod nomodify notrap nopeer noquery'
     update_conf /etc/ntp.conf 'restrict -6 default kod nomodify notrap nopeer noquery'
     update_conf /etc/init.d/ntp 'RUNASUSER=' 'RUNASUSER=ntp'
 )
 
-NO=2.2.2;     W=3; S=1; E=; SC=;  BD='Ensure X Window System is not installed'
+NO=2.1.2;     W=3; S=1; E=; SC=;  BD='Ensure X Window System is not installed'
 lev && [[ -z ${SX11} ]] && (remove_package xserver-xorg*)
 
-NO=2.2.3;     W=1; S=1; E=; SC=;  BD='Ensure Avahi Server is not installed'
+NO=2.1.3;     W=1; S=1; E=; SC=;  BD='Ensure Avahi Server is not installed'
 lev && [[ -z ${SAVAHI} ]] && (remove_package avahi-daemon)
 
-NO=2.2.4;     W=2; S=1; E=; SC=;  BD='Ensure CUPS is not installed'
+NO=2.1.4;     W=2; S=1; E=; SC=;  BD='Ensure CUPS is not installed'
 lev && [[ -z ${SCUPS} ]] && (remove_package cups)
 
-NO=2.2.5;     W=1; S=1; E=; SC=;  BD='Ensure DHCP Server is not installed'
+NO=2.1.5;     W=1; S=1; E=; SC=;  BD='Ensure DHCP Server is not installed'
 lev && [[ -z ${SDHCPD} ]] && (
         remove_package isc-dhcp-server
         remove_package isc-dhcp-server6
         remove_package udhcpd
 )
 
-NO=2.2.6;     W=1; S=1; E=; SC=;  BD='Ensure LDAP server is not installed'
+NO=2.1.6;     W=1; S=1; E=; SC=;  BD='Ensure LDAP server is not installed'
 lev && [[ -z ${SSLAPD} ]] && (remove_package slapd)
 
-NO=2.2.7;     W=1; S=1; E=; SC=;  BD='Ensure NFS is not installed'
+NO=2.1.7;     W=1; S=1; E=; SC=;  BD='Ensure NFS is not installed'
 lev && [[ -z ${SNFS} ]] && (remove_package nfs-kernel-server)
 
-NO=2.2.8;     W=1; S=1; E=; SC=;  BD='Ensure DNS Server is not installed'
+NO=2.1.8;     W=1; S=1; E=; SC=;  BD='Ensure DNS Server is not installed'
 lev && [[ -z ${SBIND} ]] && (remove_package bind9)
 
-NO=2.2.9;     W=1; S=1; E=; SC=;  BD='Ensure FTP Server is not installed'
+NO=2.1.9;     W=1; S=1; E=; SC=;  BD='Ensure FTP Server is not installed'
 lev && [[ -z ${SVSFTPD} ]] && (remove_package vsftpd)
 
-NO=2.2.10;    W=1; S=1; E=; SC=;  BD='Ensure HTTP server is not installed'
+NO=2.1.10;    W=1; S=1; E=; SC=;  BD='Ensure HTTP server is not installed'
 lev && [[ -z ${SAPACHE} ]] && (remove_package apache2)
 
-NO=2.2.11;    W=1; S=1; E=; SC=;  BD='Ensure IMAP and POP3 server are not installed'
+NO=2.1.11;    W=1; S=1; E=; SC=;  BD='Ensure IMAP and POP3 server are not installed'
 lev && [[ -z ${SDOVECOT} ]] && (
     remove_package dovecot-imapd
     remove_package dovecot-pop3d
 )
 
-NO=2.2.12;    W=1; S=1; E=; SC=;  BD='Ensure Samba is not installed'
+NO=2.1.12;    W=1; S=1; E=; SC=;  BD='Ensure Samba is not installed'
 lev && [[ -z ${SSAMBA} ]] && (remove_package samba)
 
-NO=2.2.13;    W=1; S=1; E=; SC=;  BD='Ensure HTTP Proxy Server is not installed'
+NO=2.1.13;    W=1; S=1; E=; SC=;  BD='Ensure HTTP Proxy Server is not installed'
 lev && [[ -z ${SSQUID} ]] && (remove_package squid)
 
-NO=2.2.14;    W=1; S=1; E=; SC=;  BD='Ensure SNMP Server is not installed'
+NO=2.1.14;    W=1; S=1; E=; SC=;  BD='Ensure SNMP Server is not installed'
 lev && [[ -z ${SSNMPD} ]] && (remove_package snmpd)
 
-NO=2.2.15;    W=1; S=1; E=; SC=;  BD='Ensure mail transfer agent is configured for local-only mode'
+NO=2.1.15;    W=1; S=1; E=; SC=;  BD='Ensure mail transfer agent is configured for local-only mode'
 lev && (
     apt list --installed 2> /dev/null | grep -q postfix
     case $? in
@@ -927,43 +957,43 @@ lev && (
     esac
 )
 
-NO=2.2.16;    W=1; S=1; E=; SC=;  BD='Ensure rsync service is not installed'
+NO=2.1.16;    W=1; S=1; E=; SC=;  BD='Ensure rsync service is not installed'
 lev && [[ -z ${SRSYNC} ]] && (remove_package rsync)
 
-NO=2.2.17;    W=1; S=1; E=; SC=;  BD='Ensure NIS Server is not installed'
+NO=2.1.17;    W=1; S=1; E=; SC=;  BD='Ensure NIS Server is not installed'
 lev && [[ -z ${SNIS} ]] && (remove_package nis)
 
-NO=2.3.1;     W=1; S=1; E=; SC=;  BD='Ensure NIS Client is not installed'
+NO=2.2.1;     W=1; S=1; E=; SC=;  BD='Ensure NIS Client is not installed'
 lev && (remove_package ypbind)
 
-NO=2.3.2;     W=1; S=1; E=; SC=;  BD='Ensure rsh client is not installed'
+NO=2.2.2;     W=1; S=1; E=; SC=;  BD='Ensure rsh client is not installed'
 lev && (remove_package rsh-client)
 
-NO=2.3.3;     W=1; S=1; E=; SC=;  BD='Ensure talk client is not installed'
+NO=2.2.3;     W=1; S=1; E=; SC=;  BD='Ensure talk client is not installed'
 lev && (remove_package talkd)
 
-NO=2.3.4;     W=1; S=1; E=; SC=;  BD='Ensure telnet client is not installed'
+NO=2.2.4;     W=1; S=1; E=; SC=;  BD='Ensure telnet client is not installed'
 lev && (remove_package telnet)
 
-NO=2.3.5;     W=1; S=1; E=; SC=;  BD='Ensure LDAP client is not installed'
+NO=2.2.5;     W=1; S=1; E=; SC=;  BD='Ensure LDAP client is not installed'
 lev && (remove_package ldap-utils)
 
-NO=2.3.6;     W=1; S=1; E=; SC=;  BD='Ensure RPC are not installed'
+NO=2.2.6;     W=1; S=1; E=; SC=;  BD='Ensure RPC are not installed'
 lev && [[ -z ${SRPC} ]] && (remove_package rpcbind)
 
-NO=2.4;     W=1; S=1; E=; SC=;  BD='Ensure nonessential services are removed or masked'
+NO=2.4;       W=1; S=1; E=; SC=;  BD='Ensure nonessential services are removed or masked'
 lev && (
     prn "Check list of listening open ports below."
     lsof -i -P -n | grep -v "(ESTABLISHED)" | tee -a ${CISLOG}
 )
 
-NO=3.1.1;       W=2; S=2; E=; SC=N; BD='Disable IPv6'
+NO=3.1.1;     W=2; S=2; E=; SC=N; BD='Disable IPv6'
 lev && [[ ${IPV6} ]] || (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
         update_grub
 )
 
-NO=3.1.2;       W=2; S=1; E=; SC=N; BD='Ensure wireless interfaces are disabled'
+NO=3.1.2;     W=2; S=1; E=; SC=N; BD='Ensure wireless interfaces are disabled'
 lev && (
     install_package network-manager
     upd && nmcli radio all off
@@ -1055,7 +1085,7 @@ lev && (
 )
 
 NO=3.3.9;     W=1; S=1; E=; SC=;  BD='Ensure IPv6 router advertisements are not accepted'
-lev && (
+lev && [[ ${IPV6} ]] && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_ra' 'net.ipv6.conf.all.accept_ra = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_ra' 'net.ipv6.conf.default.accept_ra = 0'
     reload_sysctl
@@ -1107,17 +1137,17 @@ lev && [[ ${FW} = ufw ]] && (
     )
 )
 
-NO=3.5.1.5;   W=1; S=1; E=; SC=N;  BD='Ensure outbound connections are configured'
+NO=3.5.1.5;   W=1; S=1; E=; SC=N; BD='Ensure outbound connections are configured'
 lev && [[ ${FW} = ufw ]] && (
     pfw && ufw logging on
     pfw && ufw allow out http
     pfw && ufw allow out https
-    pfw && ufw allow out ntp
-    pfw && ufw allow out dns
+    pfw && ufw allow out proto udp to any port ntp
+    pfw && ufw allow out proto udp to any port 53
     pfw && ufw allow out git
 )
 
-NO=3.5.1.6;   W=1; S=1; E=; SC=N;  BD='Ensure firewall rules exist for all open ports'
+NO=3.5.1.6;   W=1; S=1; E=; SC=N; BD='Ensure firewall rules exist for all open ports'
 lev && [[ ${FW} = ufw ]] && (
     pfw && (
     # tcp
@@ -1137,7 +1167,7 @@ lev && [[ ${FW} = ufw ]] && (
         while read PORT; do
             ufw status | grep "^${PORT}" | grep -q udp
             case $? in
-                0)  prn "ufw: TCP Port ${PORT} is already open." ;;
+                0)  prn "ufw: UDP Port ${PORT} is already open." ;;
                 *)  pfw || prn "ufw: Port ${PORT} might need to be opened."
                     pfw && prw "ufw: Opening port ${PORT}."
                     pfw && ufw allow proto udp to any port ${PORT} ;;
@@ -1161,32 +1191,32 @@ lev && [[ ${FW} = "nftables" ]] && (install_package nftables)
 NO=3.5.2.2;   W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
 lev && [[ ${FW} = "nftables" ]] && (remove_package ufw)
 
-NO=3.5.2.3;   W=1; S=1; E=; SC=N; BD='Ensure iptables are flushed'
+NO=3.5.2.3;   W=1; S=1; E=; SC=N; BD='Ensure iptables are flushed with nftables'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && iptables -F
     pfw && ip6tables -F
 )
 
-NO=3.5.2.4;   W=1; S=1; E=; SC=;  BD='Ensure a table exists'
+NO=3.5.2.4;   W=1; S=1; E=; SC=;  BD='Ensure a nftables table exists'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft create table inet filter 
 )
 
-NO=3.5.2.5;   W=1; S=1; E=; SC=;  BD='Ensure base chains exist'
+NO=3.5.2.5;   W=1; S=1; E=; SC=;  BD='Ensure nftables base chains exist'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft create chain inet filter input   { type filter hook input priority 0 \; } 
     pfw && nft create chain inet filter forward { type filter hook forward priority 0 \; }
     pfw && nft create chain inet filter output  { type filter hook output priority 0 \; }
 )
 
-NO=3.5.2.6;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
+NO=3.5.2.6;   W=1; S=1; E=; SC=;  BD='Ensure nftables loopback traffic is configured'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft add rule inet filter input iif lo accept
     pfw && nft create rule inet filter input ip saddr 127.0.0.0/8 counter drop
-    pfw && [[ ${IPV6} ]] || nft add rule inet filter input ip6 saddr ::1 counter drop
+    pfw && [[ ${IPV6} ]] && nft add rule inet filter input ip6 saddr ::1 counter drop
 )
 
-NO=3.5.2.7;   W=1; S=1; E=; SC=N;  BD='Ensure outbound and established connections are configured'
+NO=3.5.2.7;   W=1; S=1; E=; SC=N; BD='Ensure nftables outbound and established connections are configured'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft add rule inet filter input  ip protocol tcp  ct state established accept
     pfw && nft add rule inet filter input  ip protocol udp  ct state established accept
@@ -1196,7 +1226,7 @@ lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft add rule inet filter output ip protocol icmp ct state new,related,established accept
 )
 
-NO=3.5.2.8;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
+NO=3.5.2.8;   W=1; S=1; E=; SC=;  BD='Ensure nftables default deny firewall policy'
 lev && [[ ${FW} = "nftables" ]] && (
     pfw && nft add rule inet incoming-traffic management tcp dport 22
     pfw && nft chain inet filter input { policy drop \; }
@@ -1209,9 +1239,9 @@ lev && [[ ${FW} = "nftables" ]] && (
     pfw && systemctl enable nftables
 )
 
-NO=3.5.2.10;   W=1; S=1; E=; SC=;  BD='Ensure nftables rules are permanent'
+NO=3.5.2.10;  W=1; S=1; E=; SC=;  BD='Ensure nftables rules are permanent'
 lev && [[ ${FW} = "nftables" ]] && (
-    pfw && update_conf /etc/sysconfig/nftables.conf 'include "/etc/nftables/nftables.rules"'
+    pfw && update_conf /etc/nftables.conf 'include "/etc/nftables.rules"'
 )
  
 NO=3.5.3.1.1; W=1; S=1; E=; SC=;  BD='Ensure iptables packages are installed'
@@ -1226,17 +1256,7 @@ lev && [[ ${FW} = "iptables" ]] && (remove_package nftables)
 NO=3.5.3.1.3; W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
 lev && [[ ${FW} = "iptables" ]] && (remove_package ufw) 
 
-NO=3.5.3.2.1; W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
-lev && [[ ${FW} = "iptables" ]] && (
-    pfw || prn "Iptables. Default deny firewall policy might need to be configured."
-    pfw && prn "Iptables. Configuring default deny firewall policy."
-    pfw && iptables -P INPUT   DROP
-    pfw && iptables -P OUTPUT  DROP
-    pfw && iptables -P FORWARD DROP
-    pfw && iptables-save -c > /etc/iptables.rules
-)
-
-NO=3.5.3.2.2; W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
+NO=3.5.3.2.1; W=1; S=1; E=; SC=;  BD='Ensure iptables loopback traffic is configured'
 lev && [[ ${FW} = "iptables" ]] && (
     pfw || prn "Iptables. Loopback traffic might need to be configured."
     pfw && prn "Iptables. Configuring loopback traffic."
@@ -1246,7 +1266,7 @@ lev && [[ ${FW} = "iptables" ]] && (
     pfw && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.2.3; W=1; S=1; E=; SC=N; BD='Ensure outbound and established connections are configured'
+NO=3.5.3.2.2; W=1; S=1; E=; SC=N; BD='Ensure outbound and established connections are configured'
 lev && [[ ${FW} = "iptables" ]] && (
     pfw || prn "Iptables. Outbound and established connections might need to be configured."
     pfw && prn "Iptables. Configuring outbound and established connections."
@@ -1259,7 +1279,17 @@ lev && [[ ${FW} = "iptables" ]] && (
     pfw && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.2.4; W=1; S=1; E=; SC=;  BD='Ensure firewall rules exist for all open ports'
+NO=3.5.3.2.3; W=1; S=1; E=; SC=;  BD='Ensure iptables default deny firewall policy'
+lev && [[ ${FW} = "iptables" ]] && (
+    pfw || prn "Iptables. Default deny firewall policy might need to be configured."
+    pfw && prn "Iptables. Configuring default deny firewall policy."
+    pfw && iptables -P INPUT   DROP
+    pfw && iptables -P OUTPUT  DROP
+    pfw && iptables -P FORWARD DROP
+    pfw && iptables-save -c > /etc/iptables.rules
+)
+
+NO=3.5.3.2.4; W=1; S=1; E=; SC=;  BD='Ensure iptables firewall rules exist for all open ports'
 lev && [[ ${FW} = "iptables" ]] && (
     pfw || prn "Iptables. Firewall rules for all open ports might need to be configured."
     pfw && prn "Iptables. Configuring firewall rules for all open ports."
@@ -1290,17 +1320,7 @@ lev && [[ ${FW} = "iptables" ]] && (
     pfw && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.3.1; W=1; S=1; E=; SC=;  BD='Ensure IPv6 default deny firewall policy'
-lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
-    pfw || prn "Ip6tables. Default deny firewall might need to be configured."
-    pfw && prn "Ip6tables. Configuring default deny firewall policy."
-    pfw && ip6tables -P INPUT DROP
-    pfw && ip6tables -P OUTPUT DROP
-    pfw && ip6tables -P FORWARD DROP
-    pfw && iptables-save -c > /etc/iptables.rules
-)
-
-NO=3.5.3.3.2; W=1; S=1; E=; SC=;  BD='Ensure IPv6 loopback traffic is configured'
+NO=3.5.3.3.1; W=1; S=1; E=; SC=;  BD='Ensure ip6tables loopback traffic is configured'
 lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
     pfw || prn "Ip6tables. Loopback traffic might need to be configured."
     pfw && prn "Ip6tables. Configuring loopback traffic."
@@ -1310,7 +1330,7 @@ lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
     pfw && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.3.3; W=1; S=1; E=; SC=;  BD='Ensure IPv6 outbound and established connections are configured'
+NO=3.5.3.3.2; W=1; S=1; E=; SC=;  BD='Ensure ip6tables outbound and established connections are configured'
 lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
     pfw || prn "Ip6tables. Outbound and established connections might need to be configured."
     pfw && prn "Ip6tables. Configuring outbound and established connections."
@@ -1323,7 +1343,17 @@ lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
     pfw && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.3.4; W=1; S=1; E=; SC=N; BD='Ensure IPv6 firewall rules exist for all open ports'
+NO=3.5.3.3.3; W=1; S=1; E=; SC=;  BD='Ensure ip6tables default deny firewall policy'
+lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
+    pfw || prn "Ip6tables. Default deny firewall might need to be configured."
+    pfw && prn "Ip6tables. Configuring default deny firewall policy."
+    pfw && ip6tables -P INPUT DROP
+    pfw && ip6tables -P OUTPUT DROP
+    pfw && ip6tables -P FORWARD DROP
+    pfw && iptables-save -c > /etc/iptables.rules
+)
+
+NO=3.5.3.3.4; W=1; S=1; E=; SC=N; BD='Ensure ip6tables firewall rules exist for all open ports'
 lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
     pfw || prn "ip6tables. Firewall rules for all open ports might need to be configured."
     pfw && prn "ip6tables. Configuring firewall rules for all open ports."
@@ -1346,7 +1376,7 @@ lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
         case $? in
             0)  prn "UDP Port ${PORT} is already open in ip6tables." ;;
             *)  pfw || prn "ip6tables: Port ${PORT} might need to be opened."
-                pfw && prw "ip6tables: Opening port ${PORT} ."
+                pfw && prw "ip6tables: Opening port ${PORT}."
                 pfw && ip6tables -A INPUT -p udp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
         esac
     done < <(netstat -tnlp | grep "^udp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
@@ -1370,7 +1400,10 @@ lev && (
 ) 
 
 NO=4.1.1.4;   W=2; S=2; E=; SC=;  BD='Ensure audit_backlog_limit is sufficient'
-lev && (update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="audit_backlog_limit=8192"')
+lev && (
+    update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="audit_backlog_limit=8192"'
+    update_grub    
+)
 
 NO=4.1.2.1;   W=2; S=2; E=; SC=;  BD='Ensure audit log storage size is configured'
 lev && (update_conf /etc/audit/auditd.conf "max_log_file =" "max_log_file = ${MAXLOGFILE}")
@@ -1488,6 +1521,7 @@ lev && (
     update_conf /etc/audit/rules.d/audit.rules '-w /sbin/rmmod -p x -k modules'
     update_conf /etc/audit/rules.d/audit.rules '-w /sbin/modprobe -p x -k modules'
     update_conf /etc/audit/rules.d/audit.rules '-a always,exit -F arch=b64 -S init_module -S delete_module -k modules'
+    update_conf /etc/audit/rules.d/audit.rules '-a always,exit -F arch=b32 -S init_module -S delete_module -k modules'
 )
 
 NO=4.1.17;    W=2; S=2; E=; SC=;  BD='Ensure the audit configuration is immutable'
@@ -1508,40 +1542,40 @@ lev && (
 )
 
 NO=4.2.1.1;   W=1; S=1; E=; SC=;  BD='Ensure rsyslog is installed'
-lev &&  [[ ${SL} = "rsyslog" ]] && (
-    remove_package syslog-ng
+lev && (
     install_package rsyslog
 )
 
 NO=4.2.1.2;   W=1; S=1; E=; SC=;  BD='Ensure rsyslog Service is enabled'
-lev && [[ ${SL} = "rsyslog" ]] && (check_systemctl rsyslog)
+lev && (check_systemctl rsyslog)
 
 NO=4.2.1.3;   W=1; S=1; E=; SC=N; BD='Ensure logging is configured'
-lev && [[ ${SL} = "rsyslog" ]] && (
-        update_conf /etc/rsyslog.d/50-default.conf '*.emerg                                  :omusrmsg:*'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.*                                  -/var/log/mail'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.info                               -/var/log/mail.info'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.warning                            -/var/log/mail.warn'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.err                                 /var/log/mail.err'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.crit                               -/var/log/news/news.crit'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.err                                -/var/log/news/news.err'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.notice                             -/var/log/news/news.notice'
+lev && (
+        update_conf /etc/rsyslog.d/50-default.conf '*.emerg' '*.emerg                                  :omusrmsg:*'
+        update_conf /etc/rsyslog.d/50-default.conf 'mail.info' 'mail.info                               -/var/log/mail.info'
+        update_conf /etc/rsyslog.d/50-default.conf 'mail.warning' 'mail.warning                            -/var/log/mail.warn'
+        update_conf /etc/rsyslog.d/50-default.conf 'news.crit' 'news.crit                               -/var/log/news/news.crit'
+        update_conf /etc/rsyslog.d/50-default.conf 'news.err' 'news.err                                -/var/log/news/news.err'
+        update_conf /etc/rsyslog.d/50-default.conf 'news.notice' 'news.notice                             -/var/log/news/news.notice'
         update_conf /etc/rsyslog.d/50-default.conf '*.=warning' '*.=warning;*.=err                       -/var/log/warn'
-        update_conf /etc/rsyslog.d/50-default.conf '*.crit                                   /var/log/warn'
-        update_conf /etc/rsyslog.d/50-default.conf '*.*;mail.none;news.none                 -/var/log/messages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local0,local1.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local2,local3.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local4,local5.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local6,local7.*                         -/var/log/localmessages'
+        update_conf /etc/rsyslog.d/50-default.conf '*.crit' '*.crit                                   /var/log/warn'
+        update_conf /etc/rsyslog.d/50-default.conf '*.*;mail.none;news.none' '*.*;mail.none;news.none                 -/var/log/messages'
+        update_conf /etc/rsyslog.d/50-default.conf 'local0,local1.*' 'local0,local1.*                         -/var/log/localmessages'
+        update_conf /etc/rsyslog.d/50-default.conf 'local2,local3.*' 'local2,local3.*                         -/var/log/localmessages'
+        update_conf /etc/rsyslog.d/50-default.conf 'local4,local5.*' 'local4,local5.*                         -/var/log/localmessages'
+        update_conf /etc/rsyslog.d/50-default.conf 'local6,local7.*' 'local6,local7.*                         -/var/log/localmessages'
 )
 
 NO=4.2.1.4;   W=1; S=1; E=; SC=;  BD='Ensure rsyslog default file permissions configured'
-lev && [[ ${SL} = "rsyslog" ]] && (update_conf /etc/rsyslog.conf '$FileCreateMode' '$FileCreateMode 0640')
+lev && (update_conf /etc/rsyslog.conf '$FileCreateMode' '$FileCreateMode 0640')
 
 NO=4.2.1.5;   W=1; S=1; E=; SC=;  BD='Ensure rsyslog is configured to send logs to a remote log host'
-lev && [[ ${SL} = "rsyslog" ]] && [[ ! -z ${LOGHOST} ]] && (update_conf /etc/rsyslog.d/50-default.conf "*.* @@" "*.* @@${LOGHOST}")
+lev && [[ ${LOGHOST} ]] && (
+    [[ ${LOGTCP} ]] && update_conf /etc/rsyslog.d/50-default.conf "*.* @@" "*.* @@${LOGHOST}"
+    [[ ${LOGUDP} ]] && update_conf /etc/rsyslog.d/50-default.conf "*.* " "*.* ${LOGHOST}"
+)
 
-NO=4.2.1.6;   W=1; S=1; E=; SC=N; BD='Ensure remote rsyslog messages are only accepted on designated log'
+NO=4.2.1.6;   W=1; S=1; E=; SC=N; BD='Ensure remote rsyslog messages are only accepted on designated log hosts'
 lev
     # for hosts that are designated log hosts edit /etc/rsyslog.conf 
     #$ModLoad imtcp
@@ -1549,31 +1583,6 @@ lev
     ## for hosts that are not designated log hosts remove in /etc/rsyslog.conf
     #$ModLoad imtcp
     #$InputTCPServerRun 514
-
-NO=4.2.1.7;   W=1; S=1; E=; SC=;  BD='Ensure syslog-ng service is enabled'
-lev && [[ ${SL} = "syslog-ng" ]] && (
-    remove_package rsyslog
-    install_package syslog-ng
-)
-
-NO=4.2.1.8;   W=1; S=1; E=; SC=N; BD='Ensure syslog-ng logging is configured'
-lev && [[ ${SL} = "syslog-ng" ]] && (update_file /etc/syslog-ng/conf.d/syslog-ng.conf root root 640)
-
-NO=4.2.1.9;   W=1; S=1; E=; SC=;  BD='Ensure syslog-ng default file permissions configured'
-lev # edit /etc/syslog-ng/syslog-ng.conf
-    #options { chain_hostnames(off); flush_lines(0); perm(0640); stats_freq(3600); threaded(yes); };
-
-NO=4.2.1.10;  W=1; S=1; E=; SC=N; BD='Ensure syslog-ng is configured to send logs to a remote log host'
-lev && [[ ${SL} = "syslog-ng" ]] && [[ ! -z ${LOGHOST} ]] && (
-    [[ -z ${LOGTCP} ]] || update_conf /etc/syslog-ng/conf.d/syslog-ng.conf "destination logserver { tcp" "destination logserver { tcp(${LOGHOST} port(${LOGTCP})); };"
-    [[ -z ${LOGUDP} ]] || update_conf /etc/syslog-ng/conf.d/syslog-ng.conf "destination logserver { udp" "destination logserver { udp(${LOGHOST} port(${LOGUDP})); };"
-)
-
-NO=4.2.1.11;  W=1; S=1; E=; SC=N; BD='Ensure remote syslog-ng messages are only accepted on designated log hosts'
-lev # edit /etc/syslog-ng/syslog-ng.conf
-    #source net{ tcp(); };
-    #destination remote { file("/var/log/remote/${FULLHOST}-log"); };
-    #log { source(net); destination(remote); };
 
 NO=4.2.2.1;   W=1; S=1; E=; SC=;  BD='Ensure journald is configured to send logs to rsyslog'
 lev && (update_conf /etc/systemd/journald.conf 'ForwardToSyslog' 'ForwardToSyslog=yes')
@@ -1586,14 +1595,14 @@ lev && (update_conf /etc/systemd/journald.conf 'Storage' 'Storage=persistent')
 
 NO=4.2.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on all logfiles are configured'
 lev && (
-    [[ $(find /var/log -type f -perm /g=w,g=x,o=r,o=w,o=x | wc -l) -eq 0 ]] || {
+    [[ $(find /var/log -type f -perm /g+w,g+x,o+r,o+w,o+x | wc -l) -eq 0 ]] || {
         upd || prw "Some /var/log files have group w,x or other r,w,x permissions. This needs to be fixed."
         upd && prw "Some /var/log files have group w,x or other r,w,x permissions. Fixing!"
         upd && find /var/log -type f -exec chmod g-wx,o-rwx {} \; 
     }
     err  || prn "No /var/log files have group r,w or other r,w,x permissions."
     E=
-    [[ $(find /var/log -type d -perm /g=w,o=r,o=w,o=x | wc -l) -eq 0 ]] || {
+    [[ $(find /var/log -type d -perm /g+w,o+r,o+w,o+x | wc -l) -eq 0 ]] || {
         upd || prw "Some /var/log folders have group w or other r,w,x permissions. This needs to be fixed."
         upd && prw "Some /var/log folders have group w or other r,w,x permissions. Fixing!"
         upd && find /var/log -type d -exec chmod g-w,o-rwx {} \;
@@ -1640,84 +1649,103 @@ lev && (
     update_file /etc/at.allow   root root 640 '# Created by Cisecurity remediation script'
 )
 
-NO=5.2.1;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/ssh/sshd_config are configured'
+NO=5.2.1;     W=1; S=1; E=; SC=;  BD='Ensure sudo is installed'
+lev && (
+    install_package sudo
+    grep -q -E "^#includedir\s/etc/sudoers.d" /etc/sudoers
+    case $? in
+        0)  prn "Folder /etc/sudoers.d included in /etc/sudoers" ;;
+        *)  prw "Folder /etc/sudoers.d is not included in /etc/sudoers. Edit manually with visudo." ;;
+    esac
+    update_file /etc/sudoers.d/sudoers root root 440 '# Created by Cisecurity remediation script'
+)
+
+NO=5.2.2;     W=1; S=1; E=; SC=;  BD='Ensure sudo commands use pty'
+lev && (update_conf /etc/sudoers.d/sudoers 'Defaults use_pty')
+
+NO=5.2.3;     W=1; S=1; E=; SC=;  BD='Ensure sudo log file exists'
+lev && (update_conf /etc/sudoers.d/sudoers 'Defaults logfile="/var/log/sudo.log"')
+
+NO=5.3.1;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/ssh/sshd_config are configured'
 lev && [[ ${SSSHD} ]] && (update_file /etc/ssh/sshd_config root root 600)
 
-NO=5.2.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH private host key files are configured'
+NO=5.3.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH private host key files are configured'
 lev && [[ ${SSSHD} ]] && (
     for KEY in /etc/ssh/ssh_host_*_key; do 
         update_file ${KEY} root root 600
     done 
 )
 
-NO=5.2.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH public host key files are configured'
+NO=5.3.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH public host key files are configured'
 lev && [[ ${SSSHD} ]] && (
     for KEY in /etc/ssh/ssh_host_*_key.pub; do 
         update_file ${KEY} root root 644
     done 
 )
 
-NO=5.2.4;     W=1; S=1; E=; SC=;  BD='Ensure SSH LogLevel is appropriate'
+
+NO=5.3.4;     W=1; S=1; E=; SC=;  BD='Ensure SSH access is limited'
+lev && [[ ${SSSHD} ]] && [[ ${SUDOUSR} ]] && (update_conf /etc/ssh/sshd_config 'AllowUsers' "AllowUsers ${SUDOUSR}")
+
+NO=5.3.5;     W=1; S=1; E=; SC=;  BD='Ensure SSH LogLevel is appropriate'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'LogLevel' 'LogLevel INFO')
 
-NO=5.2.5;     W=1; S=1; E=; SC=;  BD='Ensure SSH X11 forwarding is disabled'
+NO=5.3.6;     W=1; S=1; E=; SC=;  BD='Ensure SSH X11 forwarding is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'X11Forwarding' 'X11Forwarding no')
 
-NO=5.2.6;     W=1; S=1; E=; SC=;  BD='Ensure SSH MaxAuthTries is set to 4 or less'
+NO=5.3.7;     W=1; S=1; E=; SC=;  BD='Ensure SSH MaxAuthTries is set to 4 or less'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxAuthTries' 'MaxAuthTries 4')
 
-NO=5.2.7;     W=1; S=1; E=; SC=;  BD='Ensure SSH IgnoreRhosts is enabled'
+NO=5.3.8;     W=1; S=1; E=; SC=;  BD='Ensure SSH IgnoreRhosts is enabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'IgnoreRhosts' 'IgnoreRhosts yes')
 
-NO=5.2.8;     W=1; S=1; E=; SC=;  BD='Ensure SSH HostbasedAuthentication is disabled'
+NO=5.3.9;     W=1; S=1; E=; SC=;  BD='Ensure SSH HostbasedAuthentication is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'HostbasedAuthentication' 'HostbasedAuthentication no')
 
-NO=5.2.9;    W=1; S=1; E=; SC=;  BD='Ensure SSH root login is disabled'
+NO=5.3.10;    W=1; S=1; E=; SC=;  BD='Ensure SSH root login is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitRootLogin' 'PermitRootLogin no')
 
-NO=5.2.10;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitEmptyPasswords is disabled'
+NO=5.3.11;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitEmptyPasswords is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitEmptyPasswords' 'PermitEmptyPasswords no')
 
-NO=5.2.11;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitUserEnvironment is disabled'
+NO=5.3.12;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitUserEnvironment is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitUserEnvironment' 'PermitUserEnvironment no')
 
-NO=5.2.12;    W=1; S=1; E=; SC=;  BD='Ensure only strong Ciphers are used'
+NO=5.3.13;    W=1; S=1; E=; SC=;  BD='Ensure only strong Ciphers are used'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'Ciphers' 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr')
 
-NO=5.2.13;    W=1; S=1; E=; SC=;  BD='Ensure only strong MAC algorithms are used'
+NO=5.3.14;    W=1; S=1; E=; SC=;  BD='Ensure only strong MAC algorithms are used'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MACs' 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256')
 
-NO=5.2.14;    W=1; S=1; E=; SC=;  BD='Ensure only strong Key Exchange algorithms are used'
+NO=5.3.15;    W=1; S=1; E=; SC=;  BD='Ensure only strong Key Exchange algorithms are used'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'KexAlgorithms' 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256') 
 
-NO=5.2.15;    W=1; S=1; E=; SC=;  BD='Ensure SSH Idle Timeout Interval is configured'
+NO=5.3.16;    W=1; S=1; E=; SC=;  BD='Ensure SSH Idle Timeout Interval is configured'
 lev && [[ ${SSSHD} ]] && (
     update_conf /etc/ssh/sshd_config "ClientAliveInterval" "ClientAliveInterval ${SSHTMOUT}"
     update_conf /etc/ssh/sshd_config 'ClientAliveCountMax' "ClientAliveCountMax ${SSHCOMAX}"
 )
 
-NO=5.2.16;    W=1; S=1; E=; SC=;  BD='Ensure SSH LoginGraceTime is set to one minute or less'
+NO=5.3.17;    W=1; S=1; E=; SC=;  BD='Ensure SSH LoginGraceTime is set to one minute or less'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'LoginGraceTime' 'LoginGraceTime 60')
 
-NO=5.2.17;    W=1; S=1; E=; SC=;  BD='Ensure SSH access is limited'
-lev && [[ ${SSSHD} ]] && [[ ${SUDOUSR} ]] && (update_conf /etc/ssh/sshd_config 'AllowUsers' "AllowUsers ${SUDOUSR}")
 
-NO=5.2.18;    W=1; S=1; E=; SC=;  BD='Ensure SSH warning banner is configured'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'Banner /etc/issue.net' 'Banner /etc/issue.net')
+NO=5.3.18;    W=1; S=1; E=; SC=;  BD='Ensure SSH warning banner is configured'
+lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'Banner' 'Banner /etc/issue.net')
 
-NO=5.2.19;    W=1; S=1; E=; SC=;  BD='Ensure SSH PAM is enabled'
+NO=5.3.19;    W=1; S=1; E=; SC=;  BD='Ensure SSH PAM is enabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'UsePAM' 'UsePAM yes')
 
-NO=5.2.20;    W=1; S=1; E=; SC=;  BD='Ensure SSH AllowTcpForwarding is disabled'
+NO=5.3.20;    W=1; S=1; E=; SC=;  BD='Ensure SSH AllowTcpForwarding is disabled'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'AllowTcpForwarding' 'AllowTcpForwarding no')
 
-NO=5.2.21;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxStartups is configured'
+NO=5.3.21;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxStartups is configured'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxStartups' 'MaxStartups 10:30:100')
 
-NO=5.2.22;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxSessions is set to 4 or less'
+NO=5.3.22;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxSessions is is limited'
 lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxSessions' "MaxSessions ${SSHMAXSS}")
 
-NO=5.3.1;     W=1; S=1; E=; SC=;  BD='Ensure password creation requirements are configured'
+NO=5.4.1;     W=1; S=1; E=; SC=;  BD='Ensure password creation requirements are configured'
 lev && (
     install_package libpam-pwquality
     update_conf /etc/pam.d/common-password "password	requisite			pam_pwquality" "password	requisite			pam_pwquality.so	retry=${PAMRETRY}"
@@ -1728,17 +1756,17 @@ lev && (
     update_conf /etc/security/pwquality.conf "lcredit" "lcredit = ${PAMLCREDIT}"
 )
 
-NO=5.3.2;     W=1; S=1; E=; SC=;  BD='Ensure lockout for failed password attempts is configured'
+NO=5.4.2;     W=1; S=1; E=; SC=;  BD='Ensure lockout for failed password attempts is configured'
 lev && (
-    update_conf /etc/pam.d/common-auth "auth	required			pam_tally2" "auth	required			pam_tally2.so	onerr=fail	audit	silent	deny=${PAMDENY}	unlock_time=${PAMUNLOCK}"
+    update_conf /etc/pam.d/common-auth "auth	required			pam_tally2.so" "auth	required			pam_tally2.so	onerr=fail	audit	silent	deny=${PAMDENY}	unlock_time=${PAMUNLOCK}"
     update_conf /etc/pam.d/common-account 'account	requisite			pam_deny.so'
     update_conf /etc/pam.d/common-account 'account	required			pam_tally2.so'
 )
 
-NO=5.3.3;     W=1; S=1; E=; SC=;  BD='Ensure password reuse is limited'
-lev && (update_conf /etc/pam.d/common-password "password	required	pam_pwhistory" "password	required	pam_pwhistory.so	remember=${PAMHISTORY}")
+NO=5.4.3;     W=1; S=1; E=; SC=;  BD='Ensure password reuse is limited'
+lev && (update_conf /etc/pam.d/common-password "password	required	pam_pwhistory.so" "password	required	pam_pwhistory.so	remember=${PAMHISTORY}")
 
-NO=5.3.4;     W=1; S=1; E=; SC=;  BD='Ensure password hashing algorithm is SHA-512'
+NO=5.4.4;     W=1; S=1; E=; SC=;  BD='Ensure password hashing algorithm is SHA-512'
 lev && (
     grep "^password" /etc/pam.d/common-password | grep -q ${PAMENCRYPT}
     (($? != 0)) && prw "Password encryption is not set to ${PAMENCRYPT}. Update manually in /etc/pam.d/common-password."
@@ -1746,38 +1774,37 @@ lev && (
 )
 
 # Parameter 1 = (4=mindays,5=maxdays, 6=warndays,7=inactive)
-NO=5.4.1.1;   W=1; S=1; E=; SC=;  BD='Ensure password expiration is 365 days or less'
-lev && (
-    update_conf /etc/login.defs "PASS_MAX_DAYS" "PASS_MAX_DAYS ${PASSMAXDAYS}"
-    update_chage 5 ${PASSMAXDAYS}
-
-)
-
-NO=5.4.1.2;   W=1; S=1; E=; SC=;  BD='Ensure minimum days between password changes is configured'
+NO=5.5.1.1;   W=1; S=1; E=; SC=;  BD='Ensure minimum days between password changes is configured'
 lev && (
     update_conf /etc/login.defs "PASS_MIN_DAYS" "PASS_MIN_DAYS ${PASSMINDAYS}"
     update_chage 4 ${PASSMINDAYS}
 )
 
-NO=5.4.1.3;   W=1; S=1; E=; SC=;  BD='Ensure password expiration warning days is 7 or more'
+NO=5.5.1.2;   W=1; S=1; E=; SC=;  BD='Ensure password expiration is 365 days or less'
+lev && (
+    update_conf /etc/login.defs "PASS_MAX_DAYS" "PASS_MAX_DAYS ${PASSMAXDAYS}"
+    update_chage 5 ${PASSMAXDAYS}
+)
+
+NO=5.5.1.3;   W=1; S=1; E=; SC=;  BD='Ensure password expiration warning days is 7 or more'
 lev && (
     update_conf /etc/login.defs "PASS_WARN_AGE" "PASS_WARN_AGE ${PASSWARNDAYS}"
     update_chage 6 ${PASSWARNDAYS}
 )
 
-NO=5.4.1.4;   W=1; S=1; E=; SC=;  BD='Ensure inactive password lock is 30 days or less'
+NO=5.5.1.4;   W=1; S=1; E=; SC=;  BD='Ensure inactive password lock is 30 days or less'
 lev && (
     upd && useradd -D -f ${PASSINACTIVE}
     update_chage 7 ${PASSINACTIVE}
 )
 
-NO=5.4.1.5;   W=1; S=1; E=; SC=;  BD='Ensure all users last password change date is in the past'
+NO=5.5.1.5;   W=1; S=1; E=; SC=;  BD='Ensure all users last password change date is in the past'
 lev && (
     TODAY=$(date +"%Y%m%d")
     update_chage 0 ${TODAY}
 )
 
-NO=5.4.2;     W=1; S=1; E=; SC=;  BD='Ensure system accounts are secured'
+NO=5.5.2;     W=1; S=1; E=; SC=;  BD='Ensure system accounts are secured'
 lev && (
     while read USR; do
         upd || prw "System account ${USR} has shell $(grep ^${USR} /etc/passwd | awk -F: '{print $7}'). It needs to be changed to $(which nologin)." 
@@ -1795,7 +1822,7 @@ lev && (
     err     || prn "All system accounts except root are locked."
 )
 
-NO=5.4.3;     W=1; S=1; E=; SC=;  BD='Ensure default group for the root account is GID 0'
+NO=5.5.3;     W=1; S=1; E=; SC=;  BD='Ensure default group for the root account is GID 0'
 lev && (
     if [[ $(grep "^root:" /etc/passwd | cut -d: -f4) != "0" ]]; then
         upd || prw "Root account does not have group ID 0. Please investigate." 
@@ -1805,20 +1832,19 @@ lev && (
     err     || prn "Root account has group ID 0."
 )
 
-NO=5.4.4;     W=1; S=1; E=; SC=;  BD='Ensure default user umask is 027 or more restrictive'
+NO=5.5.4;     W=1; S=1; E=; SC=;  BD='Ensure default user umask is 027 or more restrictive'
 lev && (
     update_conf /etc/pam.d/common-session 'session	optional			pam_umask.so'
     update_conf /etc/login.defs 'UMASK' 'UMASK	027'
     update_conf /etc/login.defs 'USERGROUPS_ENAB' 'USERGROUPS_ENAB	no'
 )
 
-NO=5.4.5;     W=1; S=1; E=; SC=;  BD='Ensure default user shell timeout is 900 seconds or less'
+NO=5.5.5;     W=1; S=1; E=; SC=;  BD='Ensure default user shell timeout is 900 seconds or less'
 lev && (
     update_conf /etc/profile     "readonly TMOUT" "readonly TMOUT=${CISTMOUT} ; export TMOUT"
-    #update_conf /etc/bash.bashrc "readonly TMOUT" "readonly TMOUT=${CISTMOUT} ; export TMOUT"
 )
 
-NO=5.5;       W=1; S=1; E=; SC=N; BD='Ensure root login is restricted to system console'
+NO=5.6;       W=1; S=1; E=; SC=N; BD='Ensure root login is restricted to system console'
 lev && (
     if  [[ ! -s /etc/securetty ]]; then
         update_file /etc/securetty root root 640
@@ -1831,7 +1857,7 @@ lev && (
     fi
 )
 
-NO=5.6;       W=1; S=1; E=; SC=;  BD='Ensure access to the su command is restricted'
+NO=5.7;       W=1; S=1; E=; SC=;  BD='Ensure access to the su command is restricted'
 lev && (
     update_conf /etc/pam.d/su "auth	required			pam_wheel.so" "auth	required			pam_wheel.so	use_uid	group=${SUGROUP}"
     grep -q ^${SUGROUP} /etc/group
@@ -1863,26 +1889,26 @@ lev && (
 NO=6.1.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/passwd are configured'
 lev && (update_file /etc/passwd root root 644)
 
-NO=6.1.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/gshadow- are configured'
-lev && (update_file /etc/gshadow- root shadow 640)
+NO=6.1.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/passwd- are configured'
+lev && (update_file /etc/passwd- root root 644)
 
-NO=6.1.4;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/shadow are configured'
-lev && (update_file /etc/shadow root shadow 640)
-
-NO=6.1.5;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/group are configured'
+NO=6.1.4;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/group are configured'
 lev && (update_file /etc/group root root 644)
 
-NO=6.1.6;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/passwd- are configured'
-lev && (update_file /etc/passwd- root root 600)
+NO=6.1.5;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/group- are configured'
+lev && (update_file /etc/group- root root 644)
+
+NO=6.1.6;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/shadow are configured'
+lev && (update_file /etc/shadow root shadow 640)
 
 NO=6.1.7;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/shadow- are configured'
 lev && (update_file /etc/shadow- root shadow 640)
 
-NO=6.1.8;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/group- are configured'
-lev && (update_file /etc/group- root root 644)
-
-NO=6.1.9;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/gshadow are configured'
+NO=6.1.8;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/gshadow are configured'
 lev && (update_file /etc/gshadow root shadow 640)
+
+NO=6.1.9;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/gshadow- are configured'
+lev && (update_file /etc/gshadow- root shadow 640)
 
 NO=6.1.10;    W=1; S=1; E=; SC=;  BD='Ensure no world writable files exist'
 lev && (
@@ -1956,7 +1982,15 @@ lev && (
     esac
 )
 
-NO=6.2.1;     W=1; S=1; E=; SC=;  BD='Ensure password fields are not empty'
+NO=6.2.1;     W=1; S=1; E=; SC=;  BD='Ensure accounts in /etc/passwd use shadowed passwords'
+lev && (
+    while read USR; do 
+        prw "User ${USR} is not set to shadowed password. Investigate and fix manually."
+    done < <(awk -F: '($2 != "x" ) {print $1}' /etc/passwd)
+    err || prn "All logins use shadowed passwords."
+)
+
+NO=6.2.2;     W=1; S=1; E=; SC=;  BD='Ensure password fields are not empty'
 lev && (
     while read USR; do 
         upd || prw "User ${USR} has no password. This account needs to be locked."
@@ -1966,29 +2000,15 @@ lev && (
     err || prn "No logins without passwords."
 )
 
-NO=6.2.2;     W=1; S=1; E=; SC=;  BD='Ensure root is the only UID 0 account'
+NO=6.2.3;     W=1; S=1; E=; SC=;  BD='Ensure all groups in /etc/passwd exist in /etc/group'
 lev && (
-    while read USR; do
-        prw "User ${USR} has UID 0. Fix manually."
-    done < <(awk -F: '($3 == 0) { print $1 }' /etc/passwd | grep -v root)
-    err || prn "No extra UID 0 users found." 
-)
-
-NO=6.2.3;     W=1; S=1; E=; SC=;  BD='Ensure root PATH Integrity'
-lev && (
-    (echo $PATH | grep -q ::) && prw "Empty Directory in ${PATH}"
-    (echo $PATH | grep -q :$) && prw "Trailing : in ${PATH}"
-    for DIR in $(echo $PATH | tr ":" " "); do
-        [[ ${DIR} = "." ]] && prw "PATH contains ."
-        if [[ -d ${DIR} ]]; then
-            (ls -ldH ${DIR} | cut -c6 | grep -q "-")           || prw "Group Write permission set on directory ${DIR}"
-            (ls -ldH ${DIR} | cut -c9 | grep -q "-")           || prw "Other Write permission set on directory ${DIR}"
-            (ls -ldH ${DIR} | awk '{print $3}' | grep -q root) || prw "Directory ${DIR} is not owned by root."
-        else
-            prw "Path ${DIR} is not a directory."
-        fi
+    for GROUP in $(cut -s -d: -f4 /etc/passwd | sort -u ); do 
+        grep -q -P "^.*?:[^:]*:${GROUP}:" /etc/group 
+        if [[ $? -ne 0 ]]; then 
+            prw "Group ${GROUP} is referenced by /etc/passwd but does not exist in /etc/group." 
+        fi 
     done
-    err || prn "PATH integrity is correct."
+    err || prn "All groups in /etc/passwd exist in /etc/group."
 )
 
 NO=6.2.4;     W=1; S=1; E=; SC=;  BD='Ensure all users home directories exist'
@@ -2005,7 +2025,22 @@ lev && (
     err  || prn "All standard users and root have a home directory."
 )
 
-NO=6.2.5;     W=1; S=1; E=; SC=;  BD='Ensure users home directories permissions are 750 or more restrictive'
+NO=6.2.5;     W=1; S=1; E=; SC=;  BD='Ensure users own their home directories'
+lev && (
+    while read USR DIR; do 
+        if [[ ! -d ${DIR} ]]; then 
+            prw "The home directory (${DIR}) of user ${USR} does not exist." 
+        else 
+            OWNER=$(stat -L -c "%U" "${DIR}") 
+            if [[ ${OWNER} != ${USR} ]]; then 
+                prw "The home directory (${DIR}) of user ${USR} is owned by ${OWNER}." 
+            fi 
+        fi 
+    done < <(grep -E -v '^(halt|sync|shutdown)' /etc/passwd | awk -F: '($7 != "'"$(which nologin)"'" && $7 != "/bin/false") { print $1 " " $6 }') 
+    err || prn "All users own their home directories."
+)
+
+NO=6.2.6;     W=1; S=1; E=; SC=;  BD='Ensure users home directories permissions are 750 or more restrictive'
 lev && (
     while read USR DIR; do 
         if [[ ! -d ${DIR} ]]; then 
@@ -2041,22 +2076,7 @@ lev && (
     err || prn "All home directories have correct permissions (750)."
 )
 
-NO=6.2.6;     W=1; S=1; E=; SC=;  BD='Ensure users own their home directories'
-lev && (
-    while read USR DIR; do 
-        if [[ ! -d ${DIR} ]]; then 
-            prw "The home directory (${DIR}) of user ${USR} does not exist." 
-        else 
-            OWNER=$(stat -L -c "%U" "${DIR}") 
-            if [[ ${OWNER} != ${USR} ]]; then 
-                prw "The home directory (${DIR}) of user ${USR} is owned by ${OWNER}." 
-            fi 
-        fi 
-    done < <(grep -E -v '^(halt|sync|shutdown)' /etc/passwd | awk -F: '($7 != "'"$(which nologin)"'" && $7 != "/bin/false") { print $1 " " $6 }') 
-    err || prn "All users own their home directories."
-)
-
-NO=6.2.7;    W=1; S=1; E=; SC=;  BD='Ensure users dot files are not group or world writable'
+NO=6.2.7;     W=1; S=1; E=; SC=;  BD='Ensure users dot files are not group or world writable'
 lev && (
     while read USR DIR; do 
         if [[ ! -d ${DIR} ]]; then 
@@ -2087,21 +2107,7 @@ lev && (
 
 )
 
-NO=6.2.8;    W=1; S=1; E=; SC=;  BD='Ensure no users have .forward files'
-lev && (
-    while read USR DIR; do 
-        if [[ ! -d ${DIR} ]]; then 
-            prw "The home directory (${DIR}) of user ${USR} does not exist." 
-        else 
-            if [[ ! -h "${DIR}/.forward" && -f "${DIR}/.forward" ]]; then 
-                prw "User ${USR} has a .forward file ${DIR}. Fix manually." 
-            fi 
-        fi 
-    done < <(grep -E -v '^(root|halt|sync|shutdown)' /etc/passwd | awk -F: '($7 != "'"$(which nologin)"'" && $7 != "/bin/false") { print $1 " " $6 }') 
-    err || prn "No users have .forward files."
-)
-
-NO=6.2.9;    W=1; S=1; E=; SC=;  BD='Ensure no users have .netrc files'
+NO=6.2.8;     W=1; S=1; E=; SC=;  BD='Ensure no users have .netrc files'
 lev && (
     while read USR DIR; do 
         if [[ ! -d ${DIR} ]]; then 
@@ -2115,26 +2121,21 @@ lev && (
     err || prn "No users have .netrc files."
 )
 
-NO=6.2.10;    W=1; S=1; E=; SC=;  BD='Ensure users .netrc Files are not group or world accessible'
+NO=6.2.9;     W=1; S=1; E=; SC=;  BD='Ensure no users have .forward files'
 lev && (
     while read USR DIR; do 
         if [[ ! -d ${DIR} ]]; then 
             prw "The home directory (${DIR}) of user ${USR} does not exist." 
         else 
-            if [[ -f "${DIR}/.netrc" ]]; then
-                PERM=$(stat -L -c %a ${DIR}/.netrc)
-                if [[ ${PERM} != "600" ]]; then
-                    upd || prw "The .netrc file permissions for user ${USR} are ${PERM} but should be 600. This needs to be fixed."
-                    upd && prw "The .netrc file permissions for user ${USR} are ${PERM} but should be 600. Fixing."
-                    upd && chmod 600 "${DIR}/.netrc"
-                fi
-            fi
-        fi
+            if [[ ! -h "${DIR}/.forward" && -f "${DIR}/.forward" ]]; then 
+                prw "User ${USR} has a .forward file ${DIR}. Fix manually." 
+            fi 
+        fi 
     done < <(grep -E -v '^(root|halt|sync|shutdown)' /etc/passwd | awk -F: '($7 != "'"$(which nologin)"'" && $7 != "/bin/false") { print $1 " " $6 }') 
-    err || prn "No users have group or world accessible .netrc files."
+    err || prn "No users have .forward files."
 )
 
-NO=6.2.11;    W=1; S=1; E=; SC=;  BD='Ensure no users have .rhosts files'
+NO=6.2.10;    W=1; S=1; E=; SC=;  BD='Ensure no users have .rhosts files'
 lev && (
     while read USR DIR; do 
         if [[ ! -d ${DIR} ]]; then 
@@ -2148,15 +2149,29 @@ lev && (
     err || prn "No users have .rhosts files."
 )
 
-NO=6.2.12;    W=1; S=1; E=; SC=;  BD='Ensure all groups in /etc/passwd exist in /etc/group'
+NO=6.2.11;    W=1; S=1; E=; SC=;  BD='Ensure root is the only UID 0 account'
 lev && (
-    for GROUP in $(cut -s -d: -f4 /etc/passwd | sort -u ); do 
-        grep -q -P "^.*?:[^:]*:${GROUP}:" /etc/group 
-        if [[ $? -ne 0 ]]; then 
-            prw "Group ${GROUP} is referenced by /etc/passwd but does not exist in /etc/group." 
-        fi 
+    while read USR; do
+        prw "User ${USR} has UID 0. Investigate and fix manually."
+    done < <(awk -F: '($3 == 0) { print $1 }' /etc/passwd | grep -v root)
+    err || prn "No extra UID 0 users found." 
+)
+
+NO=6.2.12;    W=1; S=1; E=; SC=;  BD='Ensure root PATH Integrity'
+lev && (
+    (echo $PATH | grep -q ::) && prw "Empty Directory in ${PATH}"
+    (echo $PATH | grep -q :$) && prw "Trailing : in ${PATH}"
+    for DIR in $(echo $PATH | tr ":" " "); do
+        [[ ${DIR} = "." ]] && prw "PATH contains ."
+        if [[ -d ${DIR} ]]; then
+            (ls -ldH ${DIR} | cut -c6 | grep -q "-")           || prw "Group Write permission set on directory ${DIR}"
+            (ls -ldH ${DIR} | cut -c9 | grep -q "-")           || prw "Other Write permission set on directory ${DIR}"
+            (ls -ldH ${DIR} | awk '{print $3}' | grep -q root) || prw "Directory ${DIR} is not owned by root."
+        else
+            prw "Path ${DIR} is not a directory."
+        fi
     done
-    err || prn "All groups in /etc/passwd exist in /etc/group."
+    err || prn "PATH integrity is correct."
 )
 
 NO=6.2.13;    W=1; S=1; E=; SC=;  BD='Ensure no duplicate UIDs exist'
@@ -2206,7 +2221,7 @@ lev && (
     err || prn "Shadow group account does not have any users." 
 )
 
-NO=9.9.9.9;    W=3; S=3; E=; SC=;  BD='Extra personal settings'
+NO=9.9.9.9;   W=3; S=3; E=; SC=;  BD='Extra personal settings. Change S to 2'
 lev && (
     update_conf /etc/bash.bashrc 'export HISTTIMEFORMAT' 'export HISTTIMEFORMAT="%F %T "'
     update_conf /etc/bash.bashrc 'export HISTCONTROL' 'export HISTCONTROL==ignoreboth:erasedups'
