@@ -148,8 +148,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'SSHTMOUT="300"                                     # Set ssh ClientAliveInterval.              ' >> ${CISRC}
     echo -e 'SSHCOMAX="3"                                       # Set ssh ClientAliveCountMax.              ' >> ${CISRC}
     echo -e 'SSHMAXSS="10"                                      # Set ssh MaxSessions.                      ' >> ${CISRC}
-    echo -e 'FW="ufw"                                           # iptables,nftables,ufw, blank for no fw.   ' >> ${CISRC}
-    echo -e '                                                   # Change FW to blank after first fw update. ' >> ${CISRC}
+    echo -e 'FW="ufw"                                           # iptables,nftables,ufw,blank for no update.' >> ${CISRC}
     echo -e 'GRP="Y"                                            # Update bootloader password.               ' >> ${CISRC}
     echo -e 'GRU="Y"                                            # Enable unrestricted boot.                 ' >> ${CISRC}
     echo -e 'GRF="40_custom"                                    # Grub custom config file.                  ' >> ${CISRC}
@@ -836,7 +835,7 @@ lev && (update_file /etc/issue root root 644)
 NO=1.7.6;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
 lev && (update_file /etc/issue.net root root 644)
 
-NO=1.8.1;     W=3; S=2; E=; SC=N;  BD='Ensure GNOME Display Manager is removed'
+NO=1.8.1;     W=3; S=2; E=; SC=N; BD='Ensure GNOME Display Manager is removed'
 lev && (remove_package gdm3)
 
 NO=1.8.2;     W=1; S=1; E=; SC=;  BD='Ensure GDM login banner is configured'
@@ -1548,19 +1547,19 @@ lev && (check_systemctl rsyslog)
 
 NO=4.2.1.3;   W=1; S=1; E=; SC=N; BD='Ensure logging is configured'
 lev && (
-        update_conf /etc/rsyslog.d/50-default.conf '*.emerg' '*.emerg                                  :omusrmsg:*'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.info' 'mail.info                               -/var/log/mail.info'
-        update_conf /etc/rsyslog.d/50-default.conf 'mail.warning' 'mail.warning                            -/var/log/mail.warn'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.crit' 'news.crit                               -/var/log/news/news.crit'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.err' 'news.err                                -/var/log/news/news.err'
-        update_conf /etc/rsyslog.d/50-default.conf 'news.notice' 'news.notice                             -/var/log/news/news.notice'
-        update_conf /etc/rsyslog.d/50-default.conf '*.=warning' '*.=warning;*.=err                       -/var/log/warn'
-        update_conf /etc/rsyslog.d/50-default.conf '*.crit' '*.crit                                   /var/log/warn'
-        update_conf /etc/rsyslog.d/50-default.conf '*.*;mail.none;news.none' '*.*;mail.none;news.none                 -/var/log/messages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local0,local1.*' 'local0,local1.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local2,local3.*' 'local2,local3.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local4,local5.*' 'local4,local5.*                         -/var/log/localmessages'
-        update_conf /etc/rsyslog.d/50-default.conf 'local6,local7.*' 'local6,local7.*                         -/var/log/localmessages'
+    update_conf /etc/rsyslog.d/50-default.conf '*.emerg' '*.emerg                                  :omusrmsg:*'
+    update_conf /etc/rsyslog.d/50-default.conf 'mail.info' 'mail.info                               -/var/log/mail.info'
+    update_conf /etc/rsyslog.d/50-default.conf 'mail.warning' 'mail.warning                            -/var/log/mail.warn'
+    update_conf /etc/rsyslog.d/50-default.conf 'news.crit' 'news.crit                               -/var/log/news/news.crit'
+    update_conf /etc/rsyslog.d/50-default.conf 'news.err' 'news.err                                -/var/log/news/news.err'
+    update_conf /etc/rsyslog.d/50-default.conf 'news.notice' 'news.notice                             -/var/log/news/news.notice'
+    update_conf /etc/rsyslog.d/50-default.conf '*.=warning' '*.=warning;*.=err                       -/var/log/warn'
+    update_conf /etc/rsyslog.d/50-default.conf '*.crit' '*.crit                                   /var/log/warn'
+    update_conf /etc/rsyslog.d/50-default.conf '*.*;mail.none;news.none' '*.*;mail.none;news.none                 -/var/log/messages'
+    update_conf /etc/rsyslog.d/50-default.conf 'local0,local1.*' 'local0,local1.*                         -/var/log/localmessages'
+    update_conf /etc/rsyslog.d/50-default.conf 'local2,local3.*' 'local2,local3.*                         -/var/log/localmessages'
+    update_conf /etc/rsyslog.d/50-default.conf 'local4,local5.*' 'local4,local5.*                         -/var/log/localmessages'
+    update_conf /etc/rsyslog.d/50-default.conf 'local6,local7.*' 'local6,local7.*                         -/var/log/localmessages'
 )
 
 NO=4.2.1.4;   W=1; S=1; E=; SC=;  BD='Ensure rsyslog default file permissions configured'
@@ -1679,7 +1678,6 @@ lev && ssd && (
         update_file ${KEY} root root 644
     done 
 )
-
 
 NO=5.3.4;     W=1; S=1; E=; SC=;  BD='Ensure SSH access is limited'
 lev && ssd && [[ ${SUDOUSR} ]] && (update_conf /etc/ssh/sshd_config 'AllowUsers' "AllowUsers ${SUDOUSR}")

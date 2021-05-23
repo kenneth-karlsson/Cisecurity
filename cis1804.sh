@@ -591,7 +591,7 @@ lev  # Updated in 1.1.3
 NO=1.1.5;     W=1; S=1; E=; SC=;  BD='Ensure noexec option set on /tmp partition'
 lev  # Updated in 1.1.3
 
-NO=1.1.6;    W=1; S=1; E=; SC=;  BD='Ensure /dev/shm is configured'
+NO=1.1.6;     W=1; S=1; E=; SC=;  BD='Ensure /dev/shm is configured'
 lev && (
     mount | grep -q -E "\s/dev/shm\s"
     case $? in
@@ -609,22 +609,22 @@ lev && (
     esac
 )
 
-NO=1.1.7;    W=1; S=1; E=; SC=;  BD='Ensure nodev option set on /dev/shm partition'
+NO=1.1.7;     W=1; S=1; E=; SC=;  BD='Ensure nodev option set on /dev/shm partition'
 lev  # Updated in 1.1.6
 
-NO=1.1.8;    W=1; S=1; E=; SC=;  BD='Ensure nosuid option set on /dev/shm partition'
+NO=1.1.8;     W=1; S=1; E=; SC=;  BD='Ensure nosuid option set on /dev/shm partition'
 lev  # Updated in 1.1.6
 
-NO=1.1.9;    W=1; S=1; E=; SC=;  BD='Ensure noexec option set on /dev/shm partition'
+NO=1.1.9;     W=1; S=1; E=; SC=;  BD='Ensure noexec option set on /dev/shm partition'
 lev  # Updated in 1.1.6
 
-NO=1.1.10;     W=2; S=2; E=; SC=;  BD='Ensure separate partition exists for /var'
+NO=1.1.10;    W=2; S=2; E=; SC=;  BD='Ensure separate partition exists for /var'
 lev && (check_fstab /var)
 
-NO=1.1.11;     W=2; S=2; E=; SC=;  BD='Ensure separate partition exists for /var/tmp'
+NO=1.1.11;    W=2; S=2; E=; SC=;  BD='Ensure separate partition exists for /var/tmp'
 lev && (check_fstab /var/tmp)
 
-NO=1.1.12;     W=1; S=1; E=; SC=;  BD='Ensure /var/tmp partition includes the nodev option'
+NO=1.1.12;    W=1; S=1; E=; SC=;  BD='Ensure /var/tmp partition includes the nodev option'
 lev && (update_fstab /var/tmp 'defaults,nodev,nosuid,noexec')
 
 NO=1.1.13;    W=1; S=1; E=; SC=;  BD='Ensure /var/tmp partition includes the nosuid option'
@@ -668,7 +668,7 @@ lev && (
 NO=1.1.23;    W=2; S=1; E=; SC=;  BD='Disable Automounting'
 lev && (remove_package autofs)
 
-NO=1.1.24;     W=2; S=1; E=; SC=;  BD='Disable USB Storage'
+NO=1.1.24;    W=2; S=1; E=; SC=;  BD='Disable USB Storage'
 lev && (update_modprobe usb_storage)
 
 NO=1.2.1;     W=1; S=1; E=; SC=N; BD='Ensure package manager repositories are configured'
@@ -834,22 +834,22 @@ lev && (
     qte && apparmor_status | grep processes >> ${CISLOG}
 )
     
-NO=1.7.1;   W=1; S=1; E=; SC=;  BD='Ensure message of the day is configured properly'
+NO=1.7.1;     W=1; S=1; E=; SC=;  BD='Ensure message of the day is configured properly'
 lev && (update_message /etc/motd)
 
-NO=1.7.2;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
+NO=1.7.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
 lev && (update_file /etc/issue.net root root 644)
 
-NO=1.7.3;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue are configured'
+NO=1.7.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue are configured'
 lev && (update_file /etc/issue root root 644)
 
-NO=1.7.4;   W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/motd are configured'
+NO=1.7.4;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/motd are configured'
 lev && (update_file /etc/motd root root 644)
 
-NO=1.7.5;   W=1; S=1; E=; SC=;  BD='Ensure remote login warning banner is configured properly'
+NO=1.7.5;     W=1; S=1; E=; SC=;  BD='Ensure remote login warning banner is configured properly'
 lev && (update_message /etc/issue.net)
 
-NO=1.7.6;   W=1; S=1; E=; SC=;  BD='Ensure local login warning banner is configured properly'
+NO=1.7.6;     W=1; S=1; E=; SC=;  BD='Ensure local login warning banner is configured properly'
 lev && (update_message /etc/issue)
 
 NO=1.8.1;     W=3; S=2; E=; SC=N; BD='Ensure GNOME Display Manager is removed'
@@ -917,7 +917,7 @@ lev && (
     esac
 )
 
-NO=2.1.1.2;   W=1; S=1; E=N; SC=;  BD='Ensure systemd-timesyncd is configured'
+NO=2.1.1.2;   W=1; S=1; E=N; SC=; BD='Ensure systemd-timesyncd is configured'
 lev && [[ ${NT} = systemd ]] && (check_systemctl systemd-timesyncd.service) 
 
 NO=2.1.1.3;   W=1; S=1; E=; SC=;  BD='Ensure chrony is configured'
@@ -1017,7 +1017,7 @@ lev && (remove_package ldap-utils)
 NO=2.2.6;     W=1; S=1; E=; SC=;  BD='Ensure RPC are not installed'
 lev && [[ -z ${SRPC} ]] && (remove_package rpcbind)
 
-NO=2.4;     W=1; S=1; E=; SC=N; BD='Ensure nonessential services are removed or masked'
+NO=2.4;       W=1; S=1; E=; SC=N; BD='Ensure nonessential services are removed or masked'
 lev && (
     prn "Check list of listening open ports below."
     lsof -i -P -n | grep -v "(ESTABLISHED)" | tee -a ${CISLOG}
@@ -1286,8 +1286,6 @@ lev && ipt && (
     upd && iptables -A INPUT  -p udp  -m state --state ESTABLISHED     -j ACCEPT
     upd && iptables -A INPUT  -p icmp -m state --state ESTABLISHED     -j ACCEPT
     upd && iptables-save -c > /etc/iptables.rules
-)
-
 NO=3.5.3.2.3; W=1; S=1; E=; SC=;  BD='Ensure iptables default deny firewall policy'
 lev && ipt && (
     upd || prn "Iptables. Default deny firewall policy might need to be configured."
