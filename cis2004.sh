@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20210513
+VERSION=20210523
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -86,7 +86,7 @@ LOGDIR="${CISDIR}/log"                         # Name of log folder.
 CISLOG="${LOGDIR}/cis-${DATE}.log"             # Name of log-file for all messages.
 CISWARNLOG="${LOGDIR}/ciswarn-${DATE}.log"     # Name of log-file for all warning messages. If empty then system is hardened.
 CISRC="${CISDIR}/.cisrc"                       # This file must be in disk partition with exec permissions.
-CISRCNO=69                                     # Number of paramters in .cisrc file.
+CISRCNO=67                                     # Number of paramters in .cisrc file.
 TMP1=/tmp/cistmp1.$$                           # Temp file 1.
 TMP2=/tmp/cistmp2.$$                           # Temp file 2.
 [[ -d ${LOGDIR} ]] || mkdir -m 600 ${LOGDIR}   # Create logfile directory.
@@ -148,9 +148,8 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'SSHTMOUT="300"                                     # Set ssh ClientAliveInterval.              ' >> ${CISRC}
     echo -e 'SSHCOMAX="3"                                       # Set ssh ClientAliveCountMax.              ' >> ${CISRC}
     echo -e 'SSHMAXSS="10"                                      # Set ssh MaxSessions.                      ' >> ${CISRC}
-    echo -e 'FW="ufw"                                           # Firewall can be iptables,nftables or ufw. ' >> ${CISRC}
-    echo -e 'PFW="Y"                                            # Update firewall rules.                    ' >> ${CISRC}
-    echo -e '                                                   # Change PFW to N after first fw update.    ' >> ${CISRC}
+    echo -e 'FW="ufw"                                           # iptables,nftables,ufw, blank for no fw.   ' >> ${CISRC}
+    echo -e '                                                   # Change FW to blank after first fw update. ' >> ${CISRC}
     echo -e 'GRP="Y"                                            # Update bootloader password.               ' >> ${CISRC}
     echo -e 'GRU="Y"                                            # Enable unrestricted boot.                 ' >> ${CISRC}
     echo -e 'GRF="40_custom"                                    # Grub custom config file.                  ' >> ${CISRC}
@@ -198,10 +197,9 @@ apt list --installed 2> /dev/null | grep -q net-tools
         printf '##APTK## %s\n' "${FILE}" >> ${CISRC}
     done < <(apt-key list 2>/dev/null)
 
-    echo -e "\nCISRC file ${CISRC} has now be created. Edit to suit system requirements."
+    echo -e "\nCISRC file ${CISRC} has now been created. Edit to suit system requirements."
     echo -e "\nDO NOT EXECUTE SCRIPT ON PRODUCTION SERVERS IN UPDATE MODE.\n"
     echo -e "Make sure parameter INTNETWORK is set right to allow ssh remote login."
-    echo -e "Check sshd settings hosts.allow and hosts.deny before logging out."
     echo -e "Make sure you can still log in after executing in update mode before restarting."
     echo -e "\nRestart $0\n"
     chmod 700 ${CISRC}
@@ -247,10 +245,29 @@ function err() {
     [[ ${E} ]] || return 1
 }
 
-# Check if firewall is to be updated
-function pfw() {
-    upd || PFW=
-    [[ ${PFW} ]] || return 1
+# Check for IPv6
+function ip6() {
+    [[ ${IPV6} ]] || return 1
+}
+
+# Check for ufw
+function UFW() {
+    [[ ${FW} = ufw ]] || return 1
+}
+
+# Check for nftables
+function nft() {
+    [[ ${FW} = nftables ]] || return 1
+}
+
+# Check for iptables
+function ipt() {
+    [[ ${FW} = iptables ]] || return 1
+}
+
+# Check for sshd
+function ssd() {
+    [[ ${SSSHD} ]] || return 1
 }
 
 # Print log information on screen and add to log file
@@ -519,13 +536,13 @@ function update_conf() {
                     upd && prw "File ${1} does not contain: ${REP}. Adding!"
                     upd && sed -i "$ a ${REP}" ${1} ;;
             esac
+            echo ${1} | grep -q sysctl
+                case $? in
+                    0) upd && sysctl -wq net.ipv4.route.flush=1 
+                       ip6 && upd && sysctl -wq net.ipv6.route.flush=1 ;;
+            esac
         fi    
     fi    
-}
-
-function reload_sysctl() {
-    upd && sysctl -wq net.ipv4.route.flush=1
-    upd && sysctl -wq net.ipv6.route.flush=1
 }
 
 ######################################## END OF FUNCTIONS ####################################### 
@@ -703,7 +720,7 @@ lev && (
 )
 
 NO=1.4.1;     W=1; S=1; E=; SC=;  BD='Ensure permissions on bootloader config are not overridden'
-lev && [[ $GRP ]] && (
+lev && (
     if (grep -E '^\s*chmod\s+444\s+\$\{grub_cfg\}\.new' -A 1 -B1 /usr/sbin/grub-mkconfig >/dev/null)
     then
         upd && (
@@ -819,7 +836,7 @@ lev && (update_file /etc/issue root root 644)
 NO=1.7.6;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/issue.net are configured'
 lev && (update_file /etc/issue.net root root 644)
 
-NO=1.8.1;     W=3; S=2; E=; SC=;  BD='Ensure GNOME Display Manager is removed'
+NO=1.8.1;     W=3; S=2; E=; SC=N;  BD='Ensure GNOME Display Manager is removed'
 lev && (remove_package gdm3)
 
 NO=1.8.2;     W=1; S=1; E=; SC=;  BD='Ensure GDM login banner is configured'
@@ -843,6 +860,7 @@ lev && (
         prn "Gnome is not installed."
     fi
 )
+
 NO=1.8.4;     W=1; S=1; E=; SC=;  BD='Ensure XDCMP is not enabled'
 lev && (
     if [[ -s /etc/gdm3/custom.conf ]]; then
@@ -988,7 +1006,7 @@ lev && (
 )
 
 NO=3.1.1;     W=2; S=2; E=; SC=N; BD='Disable IPv6'
-lev && [[ ${IPV6} ]] || (
+lev && ip6 || (
         update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
         update_grub
 )
@@ -1003,46 +1021,40 @@ NO=3.2.1;     W=1; S=1; E=; SC=;  BD='Ensure packet redirect sending is disabled
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.send_redirects' 'net.ipv4.conf.all.send_redirects = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.send_redirects' 'net.ipv4.conf.default.send_redirects = 0'
-    reload_sysctl
 )
 
 NO=3.2.2;     W=1; S=1; E=; SC=;  BD='Ensure IP forwarding is disabled'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.ip_forward' 'net.ipv4.ip_forward = 0'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.forwarding' 'net.ipv6.conf.all.forwarding = 0' 
-    reload_sysctl
+    ip6 && update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.forwarding' 'net.ipv6.conf.all.forwarding = 0' 
 )
 
 NO=3.3.1;     W=1; S=1; E=; SC=;  BD='Ensure source routed packets are not accepted' 
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.accept_source_route' 'net.ipv4.conf.all.accept_source_route = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.accept_source_route' 'net.ipv4.conf.default.accept_source_route = 0'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_source_route' 'net.ipv6.conf.all.accept_source_route = 0'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_source_route' 'net.ipv6.conf.default.accept_source_route = 0'
-    reload_sysctl
+    ip6 && update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_source_route' 'net.ipv6.conf.all.accept_source_route = 0'
+    ip6 && update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_source_route' 'net.ipv6.conf.default.accept_source_route = 0'
 )
 
 NO=3.3.2;     W=1; S=1; E=; SC=;  BD='Ensure ICMP redirects are not accepted'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.accept_redirects' 'net.ipv4.conf.all.accept_redirects = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.accept_redirects' 'net.ipv4.conf.default.accept_redirects = 0'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_redirects' 'net.ipv6.conf.all.accept_redirects = 0'
-    update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_redirects' 'net.ipv6.conf.default.accept_redirects = 0'
-    reload_sysctl
+    ip6 && update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_redirects' 'net.ipv6.conf.all.accept_redirects = 0'
+    ip6 && update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_redirects' 'net.ipv6.conf.default.accept_redirects = 0'
 )
 
 NO=3.3.3;     W=1; S=1; E=; SC=;  BD='Ensure secure ICMP redirects are not accepted'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.secure_redirects' 'net.ipv4.conf.all.secure_redirects = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.secure_redirects' 'net.ipv4.conf.default.secure_redirects = 0'
-    reload_sysctl
 )
 
 NO=3.3.4;     W=1; S=1; E=; SC=;  BD='Ensure suspicious packets are logged'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.log_martians' 'net.ipv4.conf.all.log_martians = 1'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.log_martians' 'net.ipv4.conf.default.log_martians = 1'
-    reload_sysctl
     if [[ -s /etc/ufw/sysctl.conf ]]; then
         grep -q ^net.ipv4.conf.all.log_martians /etc/ufw/sysctl.conf
         case $? in
@@ -1062,247 +1074,232 @@ lev && (
 NO=3.3.5;     W=1; S=1; E=; SC=;  BD='Ensure broadcast ICMP requests are ignored'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.icmp_echo_ignore_broadcasts' 'net.ipv4.icmp_echo_ignore_broadcasts = 1'
-    reload_sysctl
 )
 
 NO=3.3.6;     W=1; S=1; E=; SC=;  BD='Ensure bogus ICMP responses are ignored'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.icmp_ignore_bogus_error_responses' 'net.ipv4.icmp_ignore_bogus_error_responses = 1'
-    reload_sysctl
 )
 
 NO=3.3.7;     W=1; S=1; E=; SC=;  BD='Ensure Reverse Path Filtering is enabled'
 lev && [[ -z ${PBGP} ]] && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.all.rp_filter' 'net.ipv4.conf.all.rp_filter = 1'
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.conf.default.rp_filter' 'net.ipv4.conf.default.rp_filter = 1'
-    reload_sysctl
 )
 
 NO=3.3.8;     W=1; S=1; E=; SC=;  BD='Ensure TCP SYN Cookies is enabled'
 lev && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv4.tcp_syncookies' 'net.ipv4.tcp_syncookies = 1'
-    reload_sysctl
 )
 
 NO=3.3.9;     W=1; S=1; E=; SC=;  BD='Ensure IPv6 router advertisements are not accepted'
-lev && [[ ${IPV6} ]] && (
+lev && ip6 && (
     update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.all.accept_ra' 'net.ipv6.conf.all.accept_ra = 0'
     update_conf /etc/sysctl.d/local.conf 'net.ipv6.conf.default.accept_ra' 'net.ipv6.conf.default.accept_ra = 0'
-    reload_sysctl
 )
 
-NO=3.4.1;     W=1; S=1; E=; SC=N; BD='Ensure DCCP is disabled'
+NO=3.4.1;     W=2; S=2; E=; SC=N; BD='Ensure DCCP is disabled'
 lev && [[ -z ${PDCCP} ]] && (update_modprobe dccp)
 
-NO=3.4.2;     W=1; S=1; E=; SC=N; BD='Ensure SCTP is disabled'
+NO=3.4.2;     W=2; S=2; E=; SC=N; BD='Ensure SCTP is disabled'
 lev && [[ -z ${PSCTP} ]] && (update_modprobe sctp)
 
-NO=3.4.3;     W=1; S=1; E=; SC=N; BD='Ensure RDS is disabled'
+NO=3.4.3;     W=2; S=2; E=; SC=N; BD='Ensure RDS is disabled'
 lev && [[ -z ${PRDS} ]] && (update_modprobe rds)
 
-NO=3.4.4;     W=1; S=1; E=; SC=N; BD='Ensure TIPC is disabled'
+NO=3.4.4;     W=2; S=2; E=; SC=N; BD='Ensure TIPC is disabled'
 lev && [[ -z ${PTIPC} ]] && (update_modprobe tipc)
 
 NO=3.5.1.1;   W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is installed'
-lev && (
-    case ${FW} in
-        ufw)        install_package ufw ;;
-        nftables)   install_package nftables ;;
-        iptables)   install_package iptables
-                    install_package iptables-persistent ;;
-        *)          prw "${FW} is not set to ufw, iptables or nftables. Please correct parameters." ;;
-    esac
-)
+lev && UFW && (install_package ufw)
 
 NO=3.5.1.2;   W=1; S=1; E=; SC=;  BD='Ensure iptables-persistent is not installed'
-lev && [[ ${FW} = ufw ]] && (remove_package iptables-persistent)
+lev && UFW && (remove_package iptables-persistent)
 
 NO=3.5.1.3;   W=1; S=1; E=; SC=;  BD='Ensure ufw service is enabled'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && (
-        (ufw status | grep -qw "active") || ufw enable
-        (ufw status | grep -qi "active") || prw "ufw needs to be enabled."
-        [[ ${IPV6} ]] && (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
-        [[ ${IPV6} ]] || (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
+lev && UFW && (
+    (ufw status | grep -qwi "active") || (
+        upd || prw "UFW firewall needs to be enabled."
+        upd && prw "Enabling UFW firewall."
+        upd && ufw enable
+        err || prn "UFW: Firewall is enabled." 
     )
+    ip6 && (update_conf /etc/default/ufw 'IPV6' 'IPV6=yes')
+    ip6 || (update_conf /etc/default/ufw 'IPV6' 'IPV6=no')
 )
 
 NO=3.5.1.4;   W=1; S=1; E=; SC=;  BD='Ensure loopback traffic is configured'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && (
-        ufw allow in on lo
-        ufw allow out on lo
-        ufw deny in from 127.0.0.0/8
-        [[ ${IPV6} ]] && ufw deny in from ::1
-    )
+lev && UFW && (
+    upd || prn "UFW: Loopback traffic might need to be configured."
+    upd && prn "UFW: Configuring Loopback traffic."
+    upd && ufw allow in on lo
+    upd && ufw allow out on lo
+    upd && ufw deny in from 127.0.0.0/8
+    upd && ip6 && ufw deny in from ::1
 )
 
 NO=3.5.1.5;   W=1; S=1; E=; SC=N; BD='Ensure outbound connections are configured'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && ufw logging on
-    pfw && ufw allow out http
-    pfw && ufw allow out https
-    pfw && ufw allow out proto udp to any port ntp
-    pfw && ufw allow out proto udp to any port 53
-    pfw && ufw allow out git
+lev && UFW && (
+    upd || prn "UFW: Outbound connections  might need to be configured."
+    upd && prn "UFW: Configuring Outbound connections."
+    upd && ufw logging on
+    upd && ufw allow out http
+    upd && ufw allow out https
+    upd && ufw allow out proto udp to any port ntp
+    upd && ufw allow out proto udp to any port 53
+    upd && ufw allow out git
 )
 
 NO=3.5.1.6;   W=1; S=1; E=; SC=N; BD='Ensure firewall rules exist for all open ports'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && (
+lev && UFW && (
     # tcp
-        while read PORT; do
-            ufw status | grep "^${PORT}" | grep -q tcp
-            case $? in
-                0)  prn "ufw: TCP Port ${PORT} is already open." ;;
-                *)  pfw || prn "ufw: Port ${PORT} might need to be opened."
-                    pfw && prw "ufw: Opening port ${PORT}."
-                    case ${PORT} in 
-                        22) pfw && ufw allow proto tcp from ${INTNETWORK} to any port ${PORT} ;;
-                        *)  pfw && ufw allow proto tcp to any port ${PORT} ;;
-                    esac ;;
-            esac
-        done < <(netstat -tnlp | grep "^tcp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
+    while read PORT; do
+        ufw status | grep "^${PORT}" | grep -q tcp
+        case $? in
+            0)  prn "UFW: TCP Port ${PORT} is already open." ;;
+            *)  upd || prn "UFW: Port ${PORT} might need to be opened."
+                upd && prw "UFW: Opening port ${PORT}."
+                case ${PORT} in 
+                    22) upd && ufw allow proto tcp from ${INTNETWORK} to any port ${PORT} ;;
+                    *)  upd && ufw allow proto tcp to any port ${PORT} ;;
+                esac ;;
+        esac
+    done < <(netstat -tnlp | grep "^tcp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
     # udp
-        while read PORT; do
-            ufw status | grep "^${PORT}" | grep -q udp
-            case $? in
-                0)  prn "ufw: UDP Port ${PORT} is already open." ;;
-                *)  pfw || prn "ufw: Port ${PORT} might need to be opened."
-                    pfw && prw "ufw: Opening port ${PORT}."
-                    pfw && ufw allow proto udp to any port ${PORT} ;;
-            esac
-        done < <(netstat -tnlp | grep "^udp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
-    )
+    while read PORT; do
+        ufw status | grep "^${PORT}" | grep -q udp
+        case $? in
+            0)  prn "UFW: UDP Port ${PORT} is already open." ;;
+            *)  upd || prn "UFW: Port ${PORT} might need to be opened."
+                upd && prw "UFW: Opening port ${PORT}."
+                upd && ufw allow proto udp to any port ${PORT} ;;
+        esac
+    done < <(netstat -tnlp | grep "^udp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
 )
 
 NO=3.5.1.7;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
-lev && [[ ${FW} = ufw ]] && (
-    pfw && (
-        ufw default deny incoming
-        ufw default deny outgoing
-        ufw default deny routed
-    )
+lev && UFW && (
+    upd && ufw default deny incoming
+    upd && ufw default deny outgoing
+    upd && ufw default deny routed
 )
 
 NO=3.5.2.1;   W=1; S=1; E=; SC=;  BD='Ensure nftables is installed'
-lev && [[ ${FW} = "nftables" ]] && (install_package nftables) 
+lev && nft && (install_package nftables) 
 
 NO=3.5.2.2;   W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
-lev && [[ ${FW} = "nftables" ]] && (remove_package ufw)
+lev && nft && (remove_package ufw)
 
 NO=3.5.2.3;   W=1; S=1; E=; SC=N; BD='Ensure iptables are flushed with nftables'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && iptables -F
-    pfw && ip6tables -F
+lev && nft && (
+    upd && iptables -F
+    upd && ip6tables -F
 )
 
 NO=3.5.2.4;   W=1; S=1; E=; SC=;  BD='Ensure a nftables table exists'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && nft create table inet filter 
-)
+lev && nft && upd && (nft create table inet filter)
 
 NO=3.5.2.5;   W=1; S=1; E=; SC=;  BD='Ensure nftables base chains exist'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && nft create chain inet filter input   { type filter hook input priority 0 \; } 
-    pfw && nft create chain inet filter forward { type filter hook forward priority 0 \; }
-    pfw && nft create chain inet filter output  { type filter hook output priority 0 \; }
+lev && nft && (
+    upd && nft create chain inet filter input   { type filter hook input priority 0 \; } 
+    upd && nft create chain inet filter forward { type filter hook forward priority 0 \; }
+    upd && nft create chain inet filter output  { type filter hook output priority 0 \; }
 )
 
 NO=3.5.2.6;   W=1; S=1; E=; SC=;  BD='Ensure nftables loopback traffic is configured'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && nft add rule inet filter input iif lo accept
-    pfw && nft create rule inet filter input ip saddr 127.0.0.0/8 counter drop
-    pfw && [[ ${IPV6} ]] && nft add rule inet filter input ip6 saddr ::1 counter drop
+lev && nft && (
+    upd && nft add rule inet filter input iif lo accept
+    upd && nft create rule inet filter input ip saddr 127.0.0.0/8 counter drop
+    upd && ip6 && nft add rule inet filter input ip6 saddr ::1 counter drop
 )
 
 NO=3.5.2.7;   W=1; S=1; E=; SC=N; BD='Ensure nftables outbound and established connections are configured'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && nft add rule inet filter input  ip protocol tcp  ct state established accept
-    pfw && nft add rule inet filter input  ip protocol udp  ct state established accept
-    pfw && nft add rule inet filter input  ip protocol icmp ct state established accept
-    pfw && nft add rule inet filter output ip protocol tcp  ct state new,related,established accept
-    pfw && nft add rule inet filter output ip protocol udp  ct state new,related,established accept
-    pfw && nft add rule inet filter output ip protocol icmp ct state new,related,established accept
+lev && nft && (
+    upd || prn "Nftables: Outbound connections might need to be configured."
+    upd && prn "Nftables: Configuring outbound connections."
+    upd && nft add rule inet filter input  ip protocol tcp  ct state established accept
+    upd && nft add rule inet filter input  ip protocol udp  ct state established accept
+    upd && nft add rule inet filter input  ip protocol icmp ct state established accept
+    upd && nft add rule inet filter output ip protocol tcp  ct state new,related,established accept
+    upd && nft add rule inet filter output ip protocol udp  ct state new,related,established accept
+    upd && nft add rule inet filter output ip protocol icmp ct state new,related,established accept
 )
 
 NO=3.5.2.8;   W=1; S=1; E=; SC=;  BD='Ensure nftables default deny firewall policy'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && nft add rule inet incoming-traffic management tcp dport 22
-    pfw && nft chain inet filter input { policy drop \; }
-    pfw && nft chain inet filter forward { policy drop \; }
-    pfw && nft chain inet filter output { policy drop \; }
+lev && nft && (
+    upd || prn "Nftables: Default deny firewall policy might need to be configured."
+    upd && prn "Nftables: Configuring default deny firewall policy."
+    upd && nft add rule inet incoming-traffic management tcp dport 22
+    upd && nft chain inet filter input { policy drop \; }
+    upd && nft chain inet filter forward { policy drop \; }
+    upd && nft chain inet filter output { policy drop \; }
 )
 
 NO=3.5.2.9;   W=1; S=1; E=; SC=;  BD='Ensure nftables service is enabled'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && systemctl enable nftables
-)
+lev && nft && upd && (systemctl enable nftables)
 
 NO=3.5.2.10;  W=1; S=1; E=; SC=;  BD='Ensure nftables rules are permanent'
-lev && [[ ${FW} = "nftables" ]] && (
-    pfw && update_conf /etc/nftables.conf 'include "/etc/nftables.rules"'
-)
+lev && nft && upd && (update_conf /etc/nftables.conf 'include "/etc/nftables.rules"')
  
 NO=3.5.3.1.1; W=1; S=1; E=; SC=;  BD='Ensure iptables packages are installed'
-lev && [[ ${FW} = "iptables" ]] && (
+lev && nft && (
     install_package iptables
     install_package iptables-persistent
 )
 
 NO=3.5.3.1.2; W=1; S=1; E=; SC=;  BD='Ensure nftables is not installed'
-lev && [[ ${FW} = "iptables" ]] && (remove_package nftables) 
+lev && ipt && (remove_package nftables) 
 
 NO=3.5.3.1.3; W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
-lev && [[ ${FW} = "iptables" ]] && (remove_package ufw) 
+lev && ipt && (remove_package ufw) 
 
 NO=3.5.3.2.1; W=1; S=1; E=; SC=;  BD='Ensure iptables loopback traffic is configured'
-lev && [[ ${FW} = "iptables" ]] && (
-    pfw || prn "Iptables. Loopback traffic might need to be configured."
-    pfw && prn "Iptables. Configuring loopback traffic."
-    pfw && iptables -A INPUT  -i lo -j ACCEPT
-    pfw && iptables -A OUTPUT -o lo -j ACCEPT
-    pfw && iptables -A INPUT  -s 127.0.0.0/8 -j DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && (
+    upd || prn "Iptables. Loopback traffic might need to be configured."
+    upd && prn "Iptables. Configuring loopback traffic."
+    upd && iptables -A INPUT  -i lo -j ACCEPT
+    upd && iptables -A OUTPUT -o lo -j ACCEPT
+    upd && iptables -A INPUT  -s 127.0.0.0/8 -j DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.2.2; W=1; S=1; E=; SC=N; BD='Ensure outbound and established connections are configured'
-lev && [[ ${FW} = "iptables" ]] && (
-    pfw || prn "Iptables. Outbound and established connections might need to be configured."
-    pfw && prn "Iptables. Configuring outbound and established connections."
-    pfw && iptables -A OUTPUT -p tcp  -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && iptables -A OUTPUT -p udp  -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && iptables -A OUTPUT -p icmp -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && iptables -A INPUT  -p tcp  -m state --state ESTABLISHED     -j ACCEPT
-    pfw && iptables -A INPUT  -p udp  -m state --state ESTABLISHED     -j ACCEPT
-    pfw && iptables -A INPUT  -p icmp -m state --state ESTABLISHED     -j ACCEPT
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && (
+    upd || prn "Iptables. Outbound and established connections might need to be configured."
+    upd && prn "Iptables. Configuring outbound and established connections."
+    upd && iptables -A OUTPUT -p tcp  -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && iptables -A OUTPUT -p udp  -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && iptables -A OUTPUT -p icmp -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && iptables -A INPUT  -p tcp  -m state --state ESTABLISHED     -j ACCEPT
+    upd && iptables -A INPUT  -p udp  -m state --state ESTABLISHED     -j ACCEPT
+    upd && iptables -A INPUT  -p icmp -m state --state ESTABLISHED     -j ACCEPT
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.2.3; W=1; S=1; E=; SC=;  BD='Ensure iptables default deny firewall policy'
-lev && [[ ${FW} = "iptables" ]] && (
-    pfw || prn "Iptables. Default deny firewall policy might need to be configured."
-    pfw && prn "Iptables. Configuring default deny firewall policy."
-    pfw && iptables -P INPUT   DROP
-    pfw && iptables -P OUTPUT  DROP
-    pfw && iptables -P FORWARD DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && (
+    upd || prn "Iptables. Default deny firewall policy might need to be configured."
+    upd && prn "Iptables. Configuring default deny firewall policy."
+    upd && iptables -P INPUT   DROP
+    upd && iptables -P OUTPUT  DROP
+    upd && iptables -P FORWARD DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.2.4; W=1; S=1; E=; SC=;  BD='Ensure iptables firewall rules exist for all open ports'
-lev && [[ ${FW} = "iptables" ]] && (
-    pfw || prn "Iptables. Firewall rules for all open ports might need to be configured."
-    pfw && prn "Iptables. Configuring firewall rules for all open ports."
+lev && ipt && (
+    upd || prn "Iptables. Firewall rules for all open ports might need to be configured."
+    upd && prn "Iptables. Configuring firewall rules for all open ports."
 # tcp
     while read PORT; do
         iptables -nL | grep ${PORT} | grep -q tcp 
         case $? in
             0)  prn "TCP Port ${PORT} is already open in iptables." ;;
-            *)  pfw || prn "Iptables: Port ${PORT} might need to be opened."
-                pfw && prw "Iptables: Opening port ${PORT} ."
+            *)  upd || prn "Iptables: Port ${PORT} might need to be opened."
+                upd && prw "Iptables: Opening port ${PORT} ."
                 case ${PORT} in 
-                    22) pfw && iptables -A INPUT --source ${INTNETWORK} -p tcp --dport 22 -m state --state NEW -j ACCEPT ;;
-                    *)  pfw && iptables -A INPUT -p tcp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
+                    22) upd && iptables -A INPUT --source ${INTNETWORK} -p tcp --dport 22 -m state --state NEW -j ACCEPT ;;
+                    *)  upd && iptables -A INPUT -p tcp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
                 esac ;;
         esac
     done < <(netstat -tnlp | grep "^tcp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
@@ -1311,62 +1308,62 @@ lev && [[ ${FW} = "iptables" ]] && (
         iptables -nL | grep ${PORT} | grep -q udp 
         case $? in
             0)  prn "UDP Port ${PORT} is already open in iptables." ;;
-            *)  pfw || prn "Iptables: Port ${PORT} might need to be opened."
-                pfw && prw "Iptables: Opening port ${PORT} ."
-                pfw && iptables -A INPUT -p udp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
+            *)  upd || prn "Iptables: Port ${PORT} might need to be opened."
+                upd && prw "Iptables: Opening port ${PORT} ."
+                upd && iptables -A INPUT -p udp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
         esac
     done < <(netstat -tnlp | grep "^udp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
-    pfw && iptables -A INPUT -j DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+    upd && iptables -A INPUT -j DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.3.1; W=1; S=1; E=; SC=;  BD='Ensure ip6tables loopback traffic is configured'
-lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
-    pfw || prn "Ip6tables. Loopback traffic might need to be configured."
-    pfw && prn "Ip6tables. Configuring loopback traffic."
-    pfw && ip6tables -A INPUT  -i lo  -j ACCEPT
-    pfw && ip6tables -A OUTPUT -o lo  -j ACCEPT
-    pfw && ip6tables -A INPUT  -s ::1 -j DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && ip6 &&  (
+    upd || prn "Ip6tables. Loopback traffic might need to be configured."
+    upd && prn "Ip6tables. Configuring loopback traffic."
+    upd && ip6tables -A INPUT  -i lo  -j ACCEPT
+    upd && ip6tables -A OUTPUT -o lo  -j ACCEPT
+    upd && ip6tables -A INPUT  -s ::1 -j DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.3.2; W=1; S=1; E=; SC=;  BD='Ensure ip6tables outbound and established connections are configured'
-lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
-    pfw || prn "Ip6tables. Outbound and established connections might need to be configured."
-    pfw && prn "Ip6tables. Configuring outbound and established connections."
-    pfw && ip6tables -A OUTPUT -p tcp  -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && ip6tables -A OUTPUT -p udp  -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && ip6tables -A OUTPUT -p icmp -m state --state NEW,ESTABLISHED -j ACCEPT
-    pfw && ip6tables -A INPUT  -p tcp  -m state --state ESTABLISHED     -j ACCEPT
-    pfw && ip6tables -A INPUT  -p udp  -m state --state ESTABLISHED     -j ACCEPT
-    pfw && ip6tables -A INPUT  -p icmp -m state --state ESTABLISHED     -j ACCEPT
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && ip6 && (
+    upd || prn "Ip6tables. Outbound and established connections might need to be configured."
+    upd && prn "Ip6tables. Configuring outbound and established connections."
+    upd && ip6tables -A OUTPUT -p tcp  -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && ip6tables -A OUTPUT -p udp  -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && ip6tables -A OUTPUT -p icmp -m state --state NEW,ESTABLISHED -j ACCEPT
+    upd && ip6tables -A INPUT  -p tcp  -m state --state ESTABLISHED     -j ACCEPT
+    upd && ip6tables -A INPUT  -p udp  -m state --state ESTABLISHED     -j ACCEPT
+    upd && ip6tables -A INPUT  -p icmp -m state --state ESTABLISHED     -j ACCEPT
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.3.3; W=1; S=1; E=; SC=;  BD='Ensure ip6tables default deny firewall policy'
-lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
-    pfw || prn "Ip6tables. Default deny firewall might need to be configured."
-    pfw && prn "Ip6tables. Configuring default deny firewall policy."
-    pfw && ip6tables -P INPUT DROP
-    pfw && ip6tables -P OUTPUT DROP
-    pfw && ip6tables -P FORWARD DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+lev && ipt && ip6 && (
+    upd || prn "Ip6tables. Default deny firewall might need to be configured."
+    upd && prn "Ip6tables. Configuring default deny firewall policy."
+    upd && ip6tables -P INPUT DROP
+    upd && ip6tables -P OUTPUT DROP
+    upd && ip6tables -P FORWARD DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=3.5.3.3.4; W=1; S=1; E=; SC=N; BD='Ensure ip6tables firewall rules exist for all open ports'
-lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
-    pfw || prn "ip6tables. Firewall rules for all open ports might need to be configured."
-    pfw && prn "ip6tables. Configuring firewall rules for all open ports."
+lev && ipt && ip6 && (
+    upd || prn "ip6tables. Firewall rules for all open ports might need to be configured."
+    upd && prn "ip6tables. Configuring firewall rules for all open ports."
 # tcp
     while read PORT; do
         ip6tables -nL | grep ${PORT} | grep -q tcp
         case $? in
             0)  prn "TCP Port ${PORT} is already open in ip6tables." ;;
-            *)  pfw || prn "ip6tables: Port ${PORT} might need to be opened."
-                pfw && prw "ip6tables: Opening port ${PORT} ."
+            *)  upd || prn "ip6tables: Port ${PORT} might need to be opened."
+                upd && prw "ip6tables: Opening port ${PORT} ."
                 case ${PORT} in
-                    22) pfw && ip6tables -A INPUT --source ${INTNETWORK} -p tcp --dport 22 -m state --state NEW -j ACCEPT ;;
-                    *)  pfw && ip6tables -A INPUT -p tcp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
+                    22) upd && ip6tables -A INPUT --source ${INTNETWORK} -p tcp --dport 22 -m state --state NEW -j ACCEPT ;;
+                    *)  upd && ip6tables -A INPUT -p tcp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
                 esac ;;
         esac
     done < <(netstat -tnlp | grep "^tcp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
@@ -1375,13 +1372,13 @@ lev && [[ ${FW} = "iptables" ]] && [[ ${IPV6} ]] && (
         ip6tables -nL | grep ${PORT} | grep -q udp
         case $? in
             0)  prn "UDP Port ${PORT} is already open in ip6tables." ;;
-            *)  pfw || prn "ip6tables: Port ${PORT} might need to be opened."
-                pfw && prw "ip6tables: Opening port ${PORT}."
-                pfw && ip6tables -A INPUT -p udp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
+            *)  upd || prn "ip6tables: Port ${PORT} might need to be opened."
+                upd && prw "ip6tables: Opening port ${PORT}."
+                upd && ip6tables -A INPUT -p udp --dport ${PORT} -m state --state NEW -j ACCEPT ;;
         esac
     done < <(netstat -tnlp | grep "^udp " | grep -v 127 | cut -d: -f2 | awk  '{print $1}')
-    pfw && ip6tables -A INPUT -j DROP
-    pfw && iptables-save -c > /etc/iptables.rules
+    upd && ip6tables -A INPUT -j DROP
+    upd && iptables-save -c > /etc/iptables.rules
 )
 
 NO=4.1.1.1;   W=2; S=2; E=; SC=;  BD='Ensure auditd is installed'
@@ -1667,17 +1664,17 @@ NO=5.2.3;     W=1; S=1; E=; SC=;  BD='Ensure sudo log file exists'
 lev && (update_conf /etc/sudoers.d/sudoers 'Defaults logfile="/var/log/sudo.log"')
 
 NO=5.3.1;     W=1; S=1; E=; SC=;  BD='Ensure permissions on /etc/ssh/sshd_config are configured'
-lev && [[ ${SSSHD} ]] && (update_file /etc/ssh/sshd_config root root 600)
+lev && ssd && (update_file /etc/ssh/sshd_config root root 600)
 
 NO=5.3.2;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH private host key files are configured'
-lev && [[ ${SSSHD} ]] && (
+lev && ssd && (
     for KEY in /etc/ssh/ssh_host_*_key; do 
         update_file ${KEY} root root 600
     done 
 )
 
 NO=5.3.3;     W=1; S=1; E=; SC=;  BD='Ensure permissions on SSH public host key files are configured'
-lev && [[ ${SSSHD} ]] && (
+lev && ssd && (
     for KEY in /etc/ssh/ssh_host_*_key.pub; do 
         update_file ${KEY} root root 644
     done 
@@ -1685,65 +1682,65 @@ lev && [[ ${SSSHD} ]] && (
 
 
 NO=5.3.4;     W=1; S=1; E=; SC=;  BD='Ensure SSH access is limited'
-lev && [[ ${SSSHD} ]] && [[ ${SUDOUSR} ]] && (update_conf /etc/ssh/sshd_config 'AllowUsers' "AllowUsers ${SUDOUSR}")
+lev && ssd && [[ ${SUDOUSR} ]] && (update_conf /etc/ssh/sshd_config 'AllowUsers' "AllowUsers ${SUDOUSR}")
 
 NO=5.3.5;     W=1; S=1; E=; SC=;  BD='Ensure SSH LogLevel is appropriate'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'LogLevel' 'LogLevel INFO')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'LogLevel' 'LogLevel INFO')
 
 NO=5.3.6;     W=1; S=1; E=; SC=;  BD='Ensure SSH X11 forwarding is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'X11Forwarding' 'X11Forwarding no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'X11Forwarding' 'X11Forwarding no')
 
 NO=5.3.7;     W=1; S=1; E=; SC=;  BD='Ensure SSH MaxAuthTries is set to 4 or less'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxAuthTries' 'MaxAuthTries 4')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'MaxAuthTries' 'MaxAuthTries 4')
 
 NO=5.3.8;     W=1; S=1; E=; SC=;  BD='Ensure SSH IgnoreRhosts is enabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'IgnoreRhosts' 'IgnoreRhosts yes')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'IgnoreRhosts' 'IgnoreRhosts yes')
 
 NO=5.3.9;     W=1; S=1; E=; SC=;  BD='Ensure SSH HostbasedAuthentication is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'HostbasedAuthentication' 'HostbasedAuthentication no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'HostbasedAuthentication' 'HostbasedAuthentication no')
 
 NO=5.3.10;    W=1; S=1; E=; SC=;  BD='Ensure SSH root login is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitRootLogin' 'PermitRootLogin no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'PermitRootLogin' 'PermitRootLogin no')
 
 NO=5.3.11;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitEmptyPasswords is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitEmptyPasswords' 'PermitEmptyPasswords no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'PermitEmptyPasswords' 'PermitEmptyPasswords no')
 
 NO=5.3.12;    W=1; S=1; E=; SC=;  BD='Ensure SSH PermitUserEnvironment is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'PermitUserEnvironment' 'PermitUserEnvironment no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'PermitUserEnvironment' 'PermitUserEnvironment no')
 
 NO=5.3.13;    W=1; S=1; E=; SC=;  BD='Ensure only strong Ciphers are used'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'Ciphers' 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'Ciphers' 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr')
 
 NO=5.3.14;    W=1; S=1; E=; SC=;  BD='Ensure only strong MAC algorithms are used'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MACs' 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'MACs' 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256')
 
 NO=5.3.15;    W=1; S=1; E=; SC=;  BD='Ensure only strong Key Exchange algorithms are used'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'KexAlgorithms' 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256') 
+lev && ssd && (update_conf /etc/ssh/sshd_config 'KexAlgorithms' 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256') 
 
 NO=5.3.16;    W=1; S=1; E=; SC=;  BD='Ensure SSH Idle Timeout Interval is configured'
-lev && [[ ${SSSHD} ]] && (
+lev && ssd && (
     update_conf /etc/ssh/sshd_config "ClientAliveInterval" "ClientAliveInterval ${SSHTMOUT}"
     update_conf /etc/ssh/sshd_config 'ClientAliveCountMax' "ClientAliveCountMax ${SSHCOMAX}"
 )
 
 NO=5.3.17;    W=1; S=1; E=; SC=;  BD='Ensure SSH LoginGraceTime is set to one minute or less'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'LoginGraceTime' 'LoginGraceTime 60')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'LoginGraceTime' 'LoginGraceTime 60')
 
 
 NO=5.3.18;    W=1; S=1; E=; SC=;  BD='Ensure SSH warning banner is configured'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'Banner' 'Banner /etc/issue.net')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'Banner' 'Banner /etc/issue.net')
 
 NO=5.3.19;    W=1; S=1; E=; SC=;  BD='Ensure SSH PAM is enabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'UsePAM' 'UsePAM yes')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'UsePAM' 'UsePAM yes')
 
 NO=5.3.20;    W=1; S=1; E=; SC=;  BD='Ensure SSH AllowTcpForwarding is disabled'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'AllowTcpForwarding' 'AllowTcpForwarding no')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'AllowTcpForwarding' 'AllowTcpForwarding no')
 
 NO=5.3.21;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxStartups is configured'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxStartups' 'MaxStartups 10:30:100')
+lev && ssd && (update_conf /etc/ssh/sshd_config 'MaxStartups' 'MaxStartups 10:30:100')
 
 NO=5.3.22;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxSessions is is limited'
-lev && [[ ${SSSHD} ]] && (update_conf /etc/ssh/sshd_config 'MaxSessions' "MaxSessions ${SSHMAXSS}")
+lev && ssd && (update_conf /etc/ssh/sshd_config 'MaxSessions' "MaxSessions ${SSHMAXSS}")
 
 NO=5.4.1;     W=1; S=1; E=; SC=;  BD='Ensure password creation requirements are configured'
 lev && (
@@ -1934,7 +1931,7 @@ NO=6.1.12;    W=1; S=1; E=; SC=;  BD='Ensure no ungrouped files or directories e
 lev && (
     while read FILE; do 
         upd || prw "File ${FILE} is ungrouped. This needs to be changed to $(stat -c %G $(dirname ${FILE}))." 
-        upd && prw "File ${FILE} is ungrouped. Changing user to $(stat -c %G $(dirname ${FILE}))."
+        upd && prw "File ${FILE} is ungrouped. Changing group to $(stat -c %G $(dirname ${FILE}))."
         upd && chgrp -h $(stat -c %G $(dirname ${FILE})) ${FILE} 
     done < <(df --local -P | grep -v "/run" | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -nogroup)
     err || prn "No ungrouped files found." 
