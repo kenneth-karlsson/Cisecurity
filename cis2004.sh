@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20210523
+VERSION=20210528
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -207,7 +207,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
 
 [[ ! -s ${CISRC} ]] && echo -e "Could not find ${CISRC}. Check folder and file permissions." && exit 1
 
-CISRCCHECK=$(grep -v '##' .cisrc | wc -l)
+CISRCCHECK=$(grep -v '##' ${CISRC} | wc -l)
 if [[ ${CISRCCHECK} -ne ${CISRCNO} ]]; then
     echo "The number of parameters in ${CISRC} are ${CISRCCHECK} but should be ${CISRCNO}."
     echo "Please review ${CISRC} or delete it in order to recreate it."
@@ -673,7 +673,7 @@ lev && (update_modprobe usb_storage)
 NO=1.2.1;     W=1; S=1; E=; SC=N; BD='Ensure package manager repositories are configured'
 lev && (
     apt-cache policy | grep http | grep -vq "ubuntu.com"
-    (($? != 1)) && prw "Found other repositories. Check apt policy."
+    (($? != 1)) && prw "Found repositories that are not Ubuntu repositories. Check apt policy."
     err         || prn "Only Ubuntu repositories installed"
 )
 
