@@ -1,6 +1,6 @@
 #! /bin/bash
 
-VERSION=20210523
+VERSION=20210619
 ################################### HARDENING SCRIPT FOR UBUNTU 18.04 ########################### 
 
 # Check for bash
@@ -209,7 +209,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
 
 [[ ! -s ${CISRC} ]] && echo -e "Could not find ${CISRC}. Check folder and file permissions." && exit 1
 
-CISRCCHECK=$(grep -v '##' .cisrc | wc -l)
+CISRCCHECK=$(grep -v '##' ${CISRC} | wc -l)
 if [[ ${CISRCCHECK} -ne ${CISRCNO} ]]; then
     echo "The number of parameters in ${CISRC} are ${CISRCCHECK} but should be ${CISRCNO}."
     echo "Please review ${CISRC} or delete it in order to recreate it."
