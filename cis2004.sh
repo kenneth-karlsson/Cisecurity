@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20210528
+VERSION=20220528
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -86,7 +86,7 @@ LOGDIR="${CISDIR}/log"                         # Name of log folder.
 CISLOG="${LOGDIR}/cis-${DATE}.log"             # Name of log-file for all messages.
 CISWARNLOG="${LOGDIR}/ciswarn-${DATE}.log"     # Name of log-file for all warning messages. If empty then system is hardened.
 CISRC="${CISDIR}/.cisrc"                       # This file must be in disk partition with exec permissions.
-CISRCNO=67                                     # Number of paramters in .cisrc file.
+CISRCNO=69                                     # Number of paramters in .cisrc file.
 TMP1=/tmp/cistmp1.$$                           # Temp file 1.
 TMP2=/tmp/cistmp2.$$                           # Temp file 2.
 [[ -d ${LOGDIR} ]] || mkdir -m 600 ${LOGDIR}   # Create logfile directory.
@@ -148,6 +148,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'SSHTMOUT="300"                                     # Set ssh ClientAliveInterval.              ' >> ${CISRC}
     echo -e 'SSHCOMAX="3"                                       # Set ssh ClientAliveCountMax.              ' >> ${CISRC}
     echo -e 'SSHMAXSS="10"                                      # Set ssh MaxSessions.                      ' >> ${CISRC}
+    echo -e 'SSHMAXST="10:30:60"                                # Set ssh Maxstartups.                      ' >> ${CISRC}
     echo -e 'FW="ufw"                                           # iptables,nftables,ufw,blank for no update.' >> ${CISRC}
     echo -e 'GRP="Y"                                            # Update bootloader password.               ' >> ${CISRC}
     echo -e 'GRU="Y"                                            # Enable unrestricted boot.                 ' >> ${CISRC}
@@ -157,6 +158,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
     echo -e 'LOGHOST=""                                         # Set remote log host.                      ' >> ${CISRC}
     echo -e 'LOGUDP="514"                                       # Set remote log host udp port.             ' >> ${CISRC}
     echo -e 'LOGTCP=""                                          # Set remote log host tcp port.             ' >> ${CISRC}
+    echo -e 'AUDITLIMIT="8192"                                  # Set audit backlog limit.                  ' >> ${CISRC}
     echo -e 'PAMRETRY="3"                                       # Set PAM retries.                          ' >> ${CISRC}
     echo -e 'PAMMINLEN="14"                                     # Set PAM password length.                  ' >> ${CISRC}
     echo -e 'PAMDCREDIT="-1"                                    # Set PAM to at least 1 digit.              ' >> ${CISRC}
@@ -303,12 +305,6 @@ function lev() {
     else
         return 1
     fi
-}
-
-# Update-grub changes grub.cfg permissions. This function reverts them to 400
-function update_grub() {
-    upd && update-grub 2> /dev/null
-    upd && chmod 400 /boot/grub/grub.cfg
 }
 
 # Disables kernel modules.
@@ -529,6 +525,7 @@ function update_conf() {
                     else
                         upd || prw "File ${1} has:${STR}. This needs to be changed to:${REP}."
                         upd && prw "File ${1} has:${STR}. Changing to:${REP}."
+                        STR=$(<<<"${STR}" sed 's/[].*[]/\\&/g')
                         upd && sed -i "/^${STR}/ c ${REP}" ${1}
                     fi ;;
                 *)  upd || prw "File ${1} does not contain: ${REP}. It needs to be added."
@@ -544,7 +541,31 @@ function update_conf() {
     fi    
 }
 
+# Update-grub  updates/etc/default/grub.  
+# Parameter 1 = Grub boot parameter 
+function update_grub() {
+    local STR 
+    case ${1-} in
+        ?*) grep "^GRUB_CMDLINE_LINUX=" -q /etc/default/grub
+            case $? in
+                0)  grep "${1}" -q /etc/default/grub
+                    case $? in
+                        0)  prn "File /etc/default/grub already contains ${1}." ;;
+                        *)  STR=""GRUB_CMDLINE_LINUX=\""$(grep "^GRUB_CMDLINE_LINUX=" /etc/default/grub | cut -d\" -f2) ${1}\""
+                            update_conf /etc/default/grub "GRUB_CMDLINE_LINUX=" "${STR}" ;;
+                    esac ;;
+                *)  STR=""GRUB_CMDLINE_LINUX=\""${1}\""
+                    update_conf /etc/default/grub "GRUB_CMDLINE_LINUX=" "${STR}" ;;
+            esac ;;
+    esac
+    upd && update-grub 2> /dev/null
+    upd && chmod 400 /boot/grub/grub.cfg
+}
+
 ######################################## END OF FUNCTIONS ####################################### 
+
+NO=0.0.0.0;   W=1; S=1; E=; SC=;  BD='test'
+#lev && (update_grub) 
 
 NO=1.1.1.1;   W=1; S=1; E=; SC=;  BD='Ensure mounting of cramfs filesystems is disabled'
 lev && (update_modprobe cramfs) 
@@ -574,7 +595,7 @@ lev && (
         upd || prw "/etc/systemd/system/tmp.mount needs to be created."
         upd && prn "Creating /etc/systemd/system/tmp.mount."
         upd && cp /usr/share/systemd/tmp.mount /etc/systemd/system
-        upd && update_conf /etc/systemd/system/tmp.mount 'Options=mode=1777' 'Options=mode=1777,strictatime,nosuid,nodev,noexec'
+        update_conf /etc/systemd/system/tmp.mount 'Options=mode=1777' 'Options=mode=1777,strictatime,nosuid,nodev,noexec'
         upd && systemctl daemon-reload
         upd && systemctl --now enable tmp.mount
     fi
@@ -657,8 +678,8 @@ NO=1.1.22;    W=1; S=1; E=; SC=N; BD='Ensure sticky bit is set on all world-writ
 lev && (
     df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type d \( -perm -0002 -a ! -perm -1000 \) 2>/dev/null | grep -q "/"
     (($? == 0)) && {
-        upd  || prw "Some world-writable folders did not have sticky bit set. This needs to be fixed"
-        upd  && prw "Some world-writable folders did not have sticky bit set. Updating!"
+        upd  || prw "Some world-writable folders do not have sticky bit set. This needs to be fixed"
+        upd  && prw "Some world-writable folders do not have sticky bit set. Updating!"
         upd  && df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type d \( -perm -0002 -a ! -perm -1000 \) 2>/dev/null | xargs -I '{}' chmod a+t '{}'
     }
     err  || prn "All world-writable folders have their sticky bit set"
@@ -777,7 +798,7 @@ lev && (
 NO=1.5.2;     W=1; S=1; E=; SC=;  BD='Ensure address space layout randomization (ASLR) is enabled'
 lev && (update_conf /etc/sysctl.d/local.conf 'kernel.randomize_va_space' 'kernel.randomize_va_space = 2')
 
-NO=1.5.3;     W=1; S=1; E=; SC=;  BD='Ensure prelink is disabled'
+NO=1.5.3;     W=1; S=1; E=; SC=;  BD='Ensure prelink is not installed'
 lev && (remove_package prelink)
 
 NO=1.5.4;     W=1; S=1; E=; SC=;  BD='Ensure core dumps are restricted'
@@ -797,8 +818,8 @@ lev && (
 
 NO=1.6.1.2;   W=1; S=1; E=; SC=;  BD='Ensure AppArmor is enabled in the bootloader configuration'
 lev && (
-    update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="apparmor' 'GRUB_CMDLINE_LINUX="apparmor=1 security=apparmor"'
-    update_grub
+    update_grub "security=apparmor"
+    update_grub "apparmor=1"
 )
     
 NO=1.6.1.3;   W=1; S=1; E=; SC=;  BD='Ensure all AppArmor Profiles are in enforce or complain mode'
@@ -886,16 +907,16 @@ lev && (
     case ${NT} in
         systemd) remove_package    ntp 
                  remove_package    chrony 
-                 systemctl enable  systemd-timesyncd.service
-                 systemctl start   systemd-timesyncd.service ;;
+                 upd && systemctl enable  systemd-timesyncd.service
+                 upd && systemctl start   systemd-timesyncd.service ;;
         chrony)  remove_package    ntp 
                  install_package   chrony
-                 systemctl disable systemd-timesyncd.service
-                 systemctl stop    systemd-timesyncd.service ;;
+                 upd && systemctl disable systemd-timesyncd.service
+                 upd && systemctl stop    systemd-timesyncd.service ;;
         ntp)     remove_package    chrony
                  install_package   ntp
-                 systemctl disable systemd-timesyncd.service
-                 systemctl stop    systemd-timesyncd.service ;;
+                 upd && systemctl disable systemd-timesyncd.service
+                 upd && systemctl stop    systemd-timesyncd.service ;;
         *)       prw "${NT} is not set to systemd, chrony or ntp. Please correct parameters." ;;
     esac
 )
@@ -998,17 +1019,14 @@ lev && (remove_package ldap-utils)
 NO=2.2.6;     W=1; S=1; E=; SC=;  BD='Ensure RPC are not installed'
 lev && [[ -z ${SRPC} ]] && (remove_package rpcbind)
 
-NO=2.4;       W=1; S=1; E=; SC=;  BD='Ensure nonessential services are removed or masked'
+NO=2.3;       W=1; S=1; E=; SC=;  BD='Ensure nonessential services are removed or masked'
 lev && (
     prn "Check list of listening open ports below."
     lsof -i -P -n | grep -v "(ESTABLISHED)" | tee -a ${CISLOG}
 )
 
 NO=3.1.1;     W=2; S=2; E=; SC=N; BD='Disable IPv6'
-lev && ip6 || (
-        update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="ipv6.disable=1"'
-        update_grub
-)
+lev && ip6 || (updare_grub "ipv6.disable=1")
 
 NO=3.1.2;     W=2; S=1; E=; SC=N; BD='Ensure wireless interfaces are disabled'
 lev && (
@@ -1109,10 +1127,10 @@ lev && [[ -z ${PRDS} ]] && (update_modprobe rds)
 NO=3.4.4;     W=2; S=2; E=; SC=N; BD='Ensure TIPC is disabled'
 lev && [[ -z ${PTIPC} ]] && (update_modprobe tipc)
 
-NO=3.5.1.1;   W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is installed'
+NO=3.5.1.1;   W=1; S=1; E=; SC=;  BD='Ensure ufw is installed'
 lev && UFW && (install_package ufw)
 
-NO=3.5.1.2;   W=1; S=1; E=; SC=;  BD='Ensure iptables-persistent is not installed'
+NO=3.5.1.2;   W=1; S=1; E=; SC=;  BD='Ensure iptables-persistent is not installed with ufw'
 lev && UFW && (remove_package iptables-persistent)
 
 NO=3.5.1.3;   W=1; S=1; E=; SC=;  BD='Ensure ufw service is enabled'
@@ -1142,11 +1160,12 @@ lev && UFW && (
     upd || prn "UFW: Outbound connections  might need to be configured."
     upd && prn "UFW: Configuring Outbound connections."
     upd && ufw logging on
-    upd && ufw allow out http
-    upd && ufw allow out https
-    upd && ufw allow out proto udp to any port ntp
-    upd && ufw allow out proto udp to any port 53
-    upd && ufw allow out git
+    upd && ufw allow out on all
+    #upd && ufw allow out http
+    #upd && ufw allow out https
+    #upd && ufw allow out proto udp to any port ntp
+    #upd && ufw allow out proto udp to any port 53
+    #upd && ufw allow out git
 )
 
 NO=3.5.1.6;   W=1; S=1; E=; SC=N; BD='Ensure firewall rules exist for all open ports'
@@ -1186,7 +1205,7 @@ lev && UFW && (
 NO=3.5.2.1;   W=1; S=1; E=; SC=;  BD='Ensure nftables is installed'
 lev && nft && (install_package nftables) 
 
-NO=3.5.2.2;   W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
+NO=3.5.2.2;   W=1; S=1; E=; SC=;  BD='Ensure ufw is uninstalled or disabled with nftables'
 lev && nft && (remove_package ufw)
 
 NO=3.5.2.3;   W=1; S=1; E=; SC=N; BD='Ensure iptables are flushed with nftables'
@@ -1228,7 +1247,7 @@ NO=3.5.2.8;   W=1; S=1; E=; SC=;  BD='Ensure nftables default deny firewall poli
 lev && nft && (
     upd || prn "Nftables: Default deny firewall policy might need to be configured."
     upd && prn "Nftables: Configuring default deny firewall policy."
-    upd && nft add rule inet incoming-traffic management tcp dport 22
+    upd && ssd && nft add rule inet incoming-traffic management tcp dport 22
     upd && nft chain inet filter input { policy drop \; }
     upd && nft chain inet filter forward { policy drop \; }
     upd && nft chain inet filter output { policy drop \; }
@@ -1238,18 +1257,18 @@ NO=3.5.2.9;   W=1; S=1; E=; SC=;  BD='Ensure nftables service is enabled'
 lev && nft && upd && (systemctl enable nftables)
 
 NO=3.5.2.10;  W=1; S=1; E=; SC=;  BD='Ensure nftables rules are permanent'
-lev && nft && upd && (update_conf /etc/nftables.conf 'include "/etc/nftables.rules"')
+lev && nft && (update_conf /etc/nftables.conf 'include "/etc/nftables.rules"')
  
 NO=3.5.3.1.1; W=1; S=1; E=; SC=;  BD='Ensure iptables packages are installed'
-lev && nft && (
+lev && ipt && (
     install_package iptables
     install_package iptables-persistent
 )
 
-NO=3.5.3.1.2; W=1; S=1; E=; SC=;  BD='Ensure nftables is not installed'
+NO=3.5.3.1.2; W=1; S=1; E=; SC=;  BD='Ensure nftables is not installed with iptables'
 lev && ipt && (remove_package nftables) 
 
-NO=3.5.3.1.3; W=1; S=1; E=; SC=;  BD='Ensure Uncomplicated Firewall is not installed or disabled'
+NO=3.5.3.1.3; W=1; S=1; E=; SC=;  BD='Ensure ufw is uninstalled or disabled with iptables'
 lev && ipt && (remove_package ufw) 
 
 NO=3.5.3.2.1; W=1; S=1; E=; SC=;  BD='Ensure iptables loopback traffic is configured'
@@ -1262,7 +1281,7 @@ lev && ipt && (
     upd && iptables-save -c > /etc/iptables.rules
 )
 
-NO=3.5.3.2.2; W=1; S=1; E=; SC=N; BD='Ensure outbound and established connections are configured'
+NO=3.5.3.2.2; W=1; S=1; E=; SC=N; BD='Ensure iptables outbound and established connections are configured'
 lev && ipt && (
     upd || prn "Iptables. Outbound and established connections might need to be configured."
     upd && prn "Iptables. Configuring outbound and established connections."
@@ -1390,16 +1409,10 @@ NO=4.1.1.2;   W=2; S=2; E=; SC=;  BD='Ensure auditd service is enabled'
 lev && (check_systemctl auditd)
 
 NO=4.1.1.3;   W=2; S=2; E=; SC=;  BD='Ensure auditing for processes that start prior to auditd is enabled'
-lev && (
-    update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="audit=1"'
-    update_grub    
-) 
+lev && (update_grub "audit=1") 
 
 NO=4.1.1.4;   W=2; S=2; E=; SC=;  BD='Ensure audit_backlog_limit is sufficient'
-lev && (
-    update_conf /etc/default/grub 'GRUB_CMDLINE_LINUX="audit_backlog_limit=8192"'
-    update_grub    
-)
+lev && (update_grub "audit_backlog_limit=${AUDITLIMIT}")
 
 NO=4.1.2.1;   W=2; S=2; E=; SC=;  BD='Ensure audit log storage size is configured'
 lev && (update_conf /etc/audit/auditd.conf "max_log_file =" "max_log_file = ${MAXLOGFILE}")
@@ -1531,7 +1544,7 @@ lev && (
                 0)  upd || prw 'File /etc/audit/rules.d/audit.rules does not have "-e 2" in the last line. This needs to be deleted.'
                     upd && prw 'File /etc/audit/rules.d/audit.rules does not have "-e 2" in the last line. Deleting!.'
                     upd && sed -i "/^-e 2/ d " /etc/audit/rules.d/audit.rules
-                    upd && update_conf /etc/audit/rules.d/audit.rules '-e 2' ;;
+                    update_conf /etc/audit/rules.d/audit.rules '-e 2' ;;
                 *)  update_conf /etc/audit/rules.d/audit.rules '-e 2' ;;
             esac ;;
     esac
@@ -1735,7 +1748,7 @@ NO=5.3.20;    W=1; S=1; E=; SC=;  BD='Ensure SSH AllowTcpForwarding is disabled'
 lev && ssd && (update_conf /etc/ssh/sshd_config 'AllowTcpForwarding' 'AllowTcpForwarding no')
 
 NO=5.3.21;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxStartups is configured'
-lev && ssd && (update_conf /etc/ssh/sshd_config 'MaxStartups' 'MaxStartups 10:30:100')
+lev && ssd && (update_conf /etc/ssh/sshd_config "MaxStartups" "MaxStartups ${SSHMAXST}")
 
 NO=5.3.22;    W=1; S=1; E=; SC=;  BD='Ensure SSH MaxSessions is is limited'
 lev && ssd && (update_conf /etc/ssh/sshd_config 'MaxSessions' "MaxSessions ${SSHMAXSS}")
@@ -1764,8 +1777,7 @@ lev && (update_conf /etc/pam.d/common-password "password	required	pam_pwhistory.
 NO=5.4.4;     W=1; S=1; E=; SC=;  BD='Ensure password hashing algorithm is SHA-512'
 lev && (
     grep "^password" /etc/pam.d/common-password | grep -q ${PAMENCRYPT}
-    (($? != 0)) && prw "Password encryption is not set to ${PAMENCRYPT}. Update manually in /etc/pam.d/common-password."
-    err         || prn "Password encryption is already set to ${PAMENCRYPT}."
+    (($? != 0)) && (update_conf /etc/pam.d/common-password 'password	\[success=1 default=ignore\]	pam_unix.so' 'password	[success=1 default=ignore]	pam_unix.so obscure sha512')
 )
 
 # Parameter 1 = (4=mindays,5=maxdays, 6=warndays,7=inactive)
@@ -1876,6 +1888,7 @@ lev && (
     done < <(apt list --installed 2> /dev/null | cut -d"/" -f1 | grep -v Listing)
     if  [[ -s ${TMP1} ]]; then
         prw "The following packages have been modified. Please check."
+        cat ${TMP1} 
         cat ${TMP1} >> ${CISWARNLOG}
     fi
     err || prn "No packages have been modified." 
@@ -2211,12 +2224,12 @@ lev && (
     while read USR; do
         upd || prw "Shadow group account has user account: ${USR}. This needs to be fixed."
         upd && prw "Removing user accounts ${USR} from shadow group account."
-        upd && update_conf /etc/group "shadow:x:42:"
+        update_conf /etc/group "shadow:x:42:"
     done < <(awk -F: '($1 == "shadow") {print $4}' /etc/group | grep "[a-z,A-Z,0-9]")
     err || prn "Shadow group account does not have any users." 
 )
 
-NO=9.9.9.9;   W=3; S=3; E=; SC=;  BD='Extra personal settings. Change S to 2'
+NO=9.9.9.9;   W=3; S=3; E=; SC=;  BD='Extra personal settings. Change S or W to 1'
 lev && (
     update_conf /etc/bash.bashrc 'export HISTTIMEFORMAT' 'export HISTTIMEFORMAT="%F %T "'
     update_conf /etc/bash.bashrc 'export HISTCONTROL' 'export HISTCONTROL==ignoreboth:erasedups'
