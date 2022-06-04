@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20220528
+VERSION=20220604
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -564,9 +564,6 @@ function update_grub() {
 
 ######################################## END OF FUNCTIONS ####################################### 
 
-NO=0.0.0.0;   W=1; S=1; E=; SC=;  BD='test'
-#lev && (update_grub) 
-
 NO=1.1.1.1;   W=1; S=1; E=; SC=;  BD='Ensure mounting of cramfs filesystems is disabled'
 lev && (update_modprobe cramfs) 
 
@@ -1026,7 +1023,7 @@ lev && (
 )
 
 NO=3.1.1;     W=2; S=2; E=; SC=N; BD='Disable IPv6'
-lev && ip6 || (updare_grub "ipv6.disable=1")
+lev && ip6 || (update_grub "ipv6.disable=1")
 
 NO=3.1.2;     W=2; S=1; E=; SC=N; BD='Ensure wireless interfaces are disabled'
 lev && (
@@ -1777,7 +1774,7 @@ lev && (update_conf /etc/pam.d/common-password "password	required	pam_pwhistory.
 NO=5.4.4;     W=1; S=1; E=; SC=;  BD='Ensure password hashing algorithm is SHA-512'
 lev && (
     grep "^password" /etc/pam.d/common-password | grep -q ${PAMENCRYPT}
-    (($? != 0)) && (update_conf /etc/pam.d/common-password 'password	\[success=1 default=ignore\]	pam_unix.so' 'password	[success=1 default=ignore]	pam_unix.so obscure sha512')
+    (($? != 0)) && (update_conf /etc/pam.d/common-password 'password	\[success=1 default=ignore\]	pam_unix.so' 'password	[success=1 default=ignore]	pam_unix.so sha512')
 )
 
 # Parameter 1 = (4=mindays,5=maxdays, 6=warndays,7=inactive)
