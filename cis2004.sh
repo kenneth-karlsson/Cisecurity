@@ -1,7 +1,7 @@
 #! /bin/bash
 
 
-VERSION=20220604
+VERSION=20220607
 ################################### HARDENING SCRIPT FOR UBUNTU 2004 ########################### 
 
 # Check for bash
@@ -1157,12 +1157,11 @@ lev && UFW && (
     upd || prn "UFW: Outbound connections  might need to be configured."
     upd && prn "UFW: Configuring Outbound connections."
     upd && ufw logging on
-    upd && ufw allow out on all
-    #upd && ufw allow out http
-    #upd && ufw allow out https
-    #upd && ufw allow out proto udp to any port ntp
-    #upd && ufw allow out proto udp to any port 53
-    #upd && ufw allow out git
+    upd && ufw allow out http
+    upd && ufw allow out https
+    upd && ufw allow out proto udp to any port ntp
+    upd && ufw allow out proto udp to any port 53
+    upd && ufw allow out git
 )
 
 NO=3.5.1.6;   W=1; S=1; E=; SC=N; BD='Ensure firewall rules exist for all open ports'
@@ -1196,6 +1195,7 @@ NO=3.5.1.7;   W=1; S=1; E=; SC=;  BD='Ensure default deny firewall policy'
 lev && UFW && (
     upd && ufw default deny incoming
     upd && ufw default deny outgoing
+    #upd && ufw default allow outgoing
     upd && ufw default deny routed
 )
 
