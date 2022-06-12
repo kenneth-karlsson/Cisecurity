@@ -6,9 +6,10 @@ My name is Kenneth Karlsson and I am based in Västerås, Sweden.
 I started my computer career with ICL mainframes and continued with DRSNX, Interactive Unix and Solaris.
 Nowdays I mainly work with Linux, Windows and Macos.
 
-The purpose of these scripts is to harden Ubuntu Linux systems.
+The purpose of these scripts is to harden Ubuntu and Debian Linux systems.
 cis1804.sh is based on CIS Ubuntu Linux 18.04 LTS Benchmark v2.0.1 from www.cisecurity.org.
 cis2004.sh is based on CIS Ubuntu Linux 20.04 LTS Benchmark v1.1.0 from www.cisecurity.org.
+cisdebian.sh is based on CIS Debian Family Linux Benchmarks v1.1.0 (Draft) from www.cisecurity.org.
 
 Development started out as a test project for a large Swedish tech company but is now one of my hobies.
 
