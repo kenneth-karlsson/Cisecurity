@@ -1,10 +1,5 @@
 # Cisecurity
 
-Hi.
-
-My name is Kenneth Karlsson and I am based in Västerås, Sweden.
-I started my computer career with ICL mainframes and continued with DRSNX, Interactive Unix and Solaris.
-Nowdays I mainly work with Linux, Windows and Macos.
 
 The purpose of these scripts is to harden Ubuntu and Debian Linux systems.
 
