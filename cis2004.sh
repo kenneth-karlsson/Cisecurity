@@ -100,7 +100,7 @@ apt list --installed 2> /dev/null | grep -q net-tools
 [[ -s ${CISRC} ]] || {
     echo -e "Setup of computer specific parameters in ${CISRC}. Please wait."
     echo -e "#### Setup of computer specific parameters in ${CISRC} ####" >  ${CISRC}
-    IFS=.;read  IP1 IP2 IP3 IP4 SM1 SM2 SM3 SM4 <<< $(ifconfig | grep inet | grep -v 127 | awk {'print $2"."$4'});IFS=
+    IFS=.;read  IP1 IP2 IP3 IP4 SM1 SM2 SM3 SM4 <<< $(ifconfig | grep inet | grep -v inet6 | grep -v 127 | awk {'print $2"."$4'});IFS=
     SMASK="$(echo $(echo "obase=2;${SM1}" | bc)$(echo "obase=2;${SM2}" | bc)$(echo "obase=2;${SM3}" | bc)$(echo "obase=2;${SM4}" | bc) | sed s/0//g)"
     INTNETWORK=$((IP1 & SM1)).$((IP2 & SM2)).$((IP3 & SM3)).$((IP4 & SM4))/${#SMASK}
 
